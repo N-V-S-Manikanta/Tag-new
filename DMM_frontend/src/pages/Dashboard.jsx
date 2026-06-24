@@ -1,0 +1,119 @@
+import { useQuery } from '@tanstack/react-query';
+import {
+  FileText, CheckCircle2, Clock, XCircle, Send, Image as ImageIcon,
+  FileImage, Layers, TrendingUp, Award,
+} from 'lucide-react';
+import { dashboardApi } from '../api/endpoints.js';
+import { useAuthStore } from '../store/authStore.js';
+import PageHeader from '../components/layout/PageHeader.jsx';
+import StatCard from '../components/dashboard/StatCard.jsx';
+import SocialCards from '../components/dashboard/SocialCards.jsx';
+import ActivityTimeline from '../components/dashboard/ActivityTimeline.jsx';
+import MyUploads from '../components/dashboard/MyUploads.jsx';
+import { MonthlyTrendChart, FollowerTrendChart, PlatformBarChart, StatusPieChart } from '../components/dashboard/Charts.jsx';
+import { Card, Skeleton } from '../components/ui/primitives.jsx';
+
+export default function Dashboard() {
+  const { user } = useAuthStore();
+  // Admin + CEO get the org-wide dashboard; regular users get their personal view.
+  const isCEO = ['ADMIN', 'CEO'].includes(user?.role);
+
+  const { data: statsData, isLoading: loadingStats } = useQuery({ queryKey: ['dashboard', 'stats'], queryFn: dashboardApi.stats });
+  const { data: chartsData, isLoading: loadingCharts } = useQuery({ queryKey: ['dashboard', 'charts'], queryFn: dashboardApi.charts });
+  const { data: activityData } = useQuery({ queryKey: ['dashboard', 'activity'], queryFn: dashboardApi.activity });
+  const { data: topData } = useQuery({ queryKey: ['dashboard', 'top-platform'], queryFn: dashboardApi.topPlatform });
+
+  const stats = statsData?.stats || {};
+  const charts = chartsData?.charts || {};
+
+  // Role-specific KPI selection
+  const kpis = isCEO
+    ? [
+        { label: 'Pending Approvals', value: stats.pending, icon: Clock, tone: 'amber', to: '/approvals?status=PENDING' },
+        { label: 'Approved Content', value: stats.approved, icon: CheckCircle2, tone: 'emerald', to: '/approvals?status=APPROVED' },
+        { label: 'Rejected Content', value: stats.rejected, icon: XCircle, tone: 'rose', to: '/approvals?status=REJECTED' },
+        { label: 'Posted Content', value: stats.posted, icon: Send, tone: 'violet', to: '/approvals?status=POSTED' },
+      ]
+    : [
+        { label: 'My Pending Requests', value: stats.pending, icon: Clock, tone: 'amber', to: '/approvals?status=PENDING' },
+        { label: 'My Approved', value: stats.approved, icon: CheckCircle2, tone: 'emerald', to: '/approvals?status=APPROVED' },
+        { label: 'My Rejected', value: stats.rejected, icon: XCircle, tone: 'rose', to: '/approvals?status=REJECTED' },
+        { label: 'My Posted', value: stats.posted, icon: Send, tone: 'violet', to: '/approvals?status=POSTED' },
+      ];
+
+  const overall = [
+    { label: 'Total Requests', value: stats.totalRequests, icon: FileText, tone: 'brand', to: '/approvals' },
+    { label: 'Total Posts', value: stats.totalPosts, icon: Send, tone: 'violet', to: '/approvals?status=POSTED' },
+    { label: 'Templates', value: stats.totalTemplates, icon: FileImage, tone: 'sky', to: '/templates' },
+    { label: 'Assets', value: stats.totalAssets, icon: Layers, tone: 'emerald', to: '/assets' },
+  ];
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title={`Welcome back, ${user?.name?.split(' ')[0]} 👋`}
+        subtitle={isCEO ? 'Here is what is happening across your marketing operations.' : 'Track your content and stay on top of approvals.'}
+      />
+
+      {/* Social analytics */}
+      <SocialCards social={statsData?.social} />
+
+      {/* Role KPIs */}
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        {loadingStats
+          ? Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-28" />)
+          : kpis.map((k, i) => <StatCard key={k.label} {...k} delay={i * 0.05} />)}
+      </div>
+
+      {/* Overall stats */}
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        {overall.map((k, i) => <StatCard key={k.label} {...k} delay={i * 0.05} />)}
+      </div>
+
+      {/* Top platform highlight (CEO) */}
+      {isCEO && topData?.topPlatform && (
+        <Card className="flex items-center justify-between bg-gradient-to-r from-brand-600 to-indigo-700 p-6 text-white">
+          <div className="flex items-center gap-4">
+            <div className="rounded-2xl bg-white/15 p-3"><Award className="h-7 w-7" /></div>
+            <div>
+              <p className="text-sm text-brand-100">Top Performing Platform</p>
+              <p className="text-2xl font-extrabold">{topData.topPlatform.platform}</p>
+            </div>
+          </div>
+          <div className="hidden gap-8 text-right sm:flex">
+            <div><p className="text-2xl font-bold">{topData.topPlatform.engagementRate?.toFixed(1)}%</p><p className="text-xs text-brand-100">Engagement</p></div>
+            <div className="flex items-center"><TrendingUp className="h-8 w-8 text-brand-200" /></div>
+          </div>
+        </Card>
+      )}
+
+      {/* Charts */}
+      {loadingCharts ? (
+        <div className="grid gap-4 lg:grid-cols-2">
+          <Skeleton className="h-80" /><Skeleton className="h-80" />
+        </div>
+      ) : (
+        <>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <MonthlyTrendChart data={charts.monthlyTrend} />
+            <FollowerTrendChart data={charts.followerSeries} />
+          </div>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <PlatformBarChart data={charts.platformDistribution} />
+            <StatusPieChart data={charts.statusDistribution} />
+          </div>
+        </>
+      )}
+
+      {/* Activity timeline + (for users) recent uploads */}
+      {isCEO ? (
+        <ActivityTimeline activity={activityData?.activity} />
+      ) : (
+        <div className="grid gap-4 lg:grid-cols-2">
+          <ActivityTimeline activity={activityData?.activity} />
+          <MyUploads />
+        </div>
+      )}
+    </div>
+  );
+}

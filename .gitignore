@@ -1,0 +1,18 @@
+# Dependencies
+node_modules/
+
+# Env
+.env
+
+# Builds
+dist/
+build/
+
+# Uploads (local storage)
+DMM_backend/uploads/**/*
+!DMM_backend/uploads/**/.gitkeep
+
+# Logs & OS
+*.log
+.DS_Store
+Thumbs.db

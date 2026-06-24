@@ -1,0 +1,31 @@
+# Render Blueprint for the DMM backend API.
+# In Render: New + → "Blueprint" → pick this repo. It reads this file and
+# creates the service. Fill the `sync: false` env vars in the dashboard.
+services:
+  - type: web
+    name: dmm-backend
+    runtime: node
+    rootDir: DMM_backend
+    plan: free
+    buildCommand: npm install --omit=dev
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: JWT_SECRET
+        generateValue: true        # Render generates a strong secret
+      - key: JWT_EXPIRES_IN
+        value: 7d
+      - key: MONGO_URI
+        sync: false                # your MongoDB Atlas connection string
+      - key: CLIENT_URL
+        sync: false                # both Vercel URLs, comma-separated (CORS allowlist)
+      - key: STORAGE_DRIVER
+        value: cloudinary          # uploads must persist + be served cross-origin
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false

@@ -84,9 +84,20 @@ Open **three terminals** — backend, admin console, and product app.
 ```bash
 cd DMM_backend
 npm install
-cp .env.example .env        # a working .env is already included for local dev
+cp .env.example .env        # copy the template (uses local MongoDB by default)
 npm run dev                 # API on http://localhost:5000
 ```
+
+> **No MongoDB installed?** You can run a throwaway, in-memory database — no
+> install, no signup — in its own terminal:
+> ```bash
+> cd DMM_backend
+> node scripts/mem-mongo.js      # starts MongoDB at mongodb://127.0.0.1:27017 (keep open)
+> ```
+> Leave that window running, set `MONGO_URI=mongodb://127.0.0.1:27017/dmm_platform`
+> in `DMM_backend/.env`, then run `npm run create-admin` and `npm run dev`.
+> ⚠️ In-memory data is wiped when that window closes — for persistent data use a
+> real local MongoDB or MongoDB Atlas (`MONGO_URI`).
 
 ### 2) Admin console
 

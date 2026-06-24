@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import {
   ArrowLeft, Check, X, Send, RefreshCw, Plus, Trash2, MessageSquareWarning,
-  CheckCircle2, Clock, Hash,
+  CheckCircle2, Clock, Hash, Play,
 } from 'lucide-react';
 import { approvalApi } from '../api/endpoints.js';
 import { useAuthStore } from '../store/authStore.js';
@@ -12,7 +12,7 @@ import { Button } from '../components/ui/Button.jsx';
 import { Card, Badge, Avatar, Skeleton, Input } from '../components/ui/primitives.jsx';
 import { Modal } from '../components/ui/Modal.jsx';
 import FileDropzone from '../components/ui/FileDropzone.jsx';
-import { formatDateTime, timeAgo } from '../lib/utils.js';
+import { formatDateTime, timeAgo, isVideo } from '../lib/utils.js';
 
 export default function ApprovalDetail() {
   const { id } = useParams();
@@ -59,18 +59,23 @@ export default function ApprovalDetail() {
         {/* Left: gallery + content */}
         <div className="space-y-6 lg:col-span-2">
           <Card className="overflow-hidden">
-            <div className="relative aspect-video cursor-zoom-in bg-slate-100 dark:bg-slate-800" onClick={() => setZoom(true)}>
+            <div className={`relative aspect-video bg-slate-100 dark:bg-slate-800 ${images[activeImg] && !isVideo(images[activeImg]) ? 'cursor-zoom-in' : ''}`}
+              onClick={() => { if (images[activeImg] && !isVideo(images[activeImg])) setZoom(true); }}>
               {images[activeImg] ? (
-                <img src={images[activeImg].url} alt="" className="h-full w-full object-contain" />
-              ) : <div className="flex h-full items-center justify-center text-slate-300">No image</div>}
+                isVideo(images[activeImg])
+                  ? <video src={images[activeImg].url} controls className="h-full w-full object-contain" />
+                  : <img src={images[activeImg].url} alt="" className="h-full w-full object-contain" />
+              ) : <div className="flex h-full items-center justify-center text-slate-300">No media</div>}
               <Badge status={r.status} className="absolute right-3 top-3">{r.status}</Badge>
             </div>
             {images.length > 1 && (
               <div className="flex gap-2 overflow-x-auto p-3">
                 {images.map((img, i) => (
                   <button key={img._id} onClick={() => setActiveImg(i)}
-                    className={`h-16 w-16 shrink-0 overflow-hidden rounded-lg ring-2 transition ${i === activeImg ? 'ring-brand-500' : 'ring-transparent opacity-70 hover:opacity-100'}`}>
-                    <img src={img.url} alt="" className="h-full w-full object-cover" />
+                    className={`relative h-16 w-16 shrink-0 overflow-hidden rounded-lg ring-2 transition ${i === activeImg ? 'ring-brand-500' : 'ring-transparent opacity-70 hover:opacity-100'}`}>
+                    {isVideo(img)
+                      ? <><video src={img.url} className="h-full w-full object-cover" muted /><span className="absolute inset-0 flex items-center justify-center bg-black/30"><Play className="h-5 w-5 text-white" /></span></>
+                      : <img src={img.url} alt="" className="h-full w-full object-cover" />}
                   </button>
                 ))}
               </div>
@@ -295,13 +300,15 @@ function ResubmitModal({ request, onClose, onDone }) {
       <div className="space-y-4">
         <Input label="Title" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
         <div>
-          <span className="mb-1.5 block text-sm font-medium text-slate-600 dark:text-slate-300">Existing images (click to keep/remove · drag to reorder)</span>
+          <span className="mb-1.5 block text-sm font-medium text-slate-600 dark:text-slate-300">Existing media (click to keep/remove · drag to reorder)</span>
           <div className="flex flex-wrap gap-2">
             {ordered.map((img, i) => (
               <button key={img._id} onClick={() => toggleKeep(img._id)}
                 draggable onDragStart={() => setDragIdx(i)} onDragOver={(e) => e.preventDefault()} onDrop={() => onDrop(i)}
                 className={`relative h-20 w-20 cursor-grab overflow-hidden rounded-lg ring-2 transition active:cursor-grabbing ${img.kept ? 'ring-brand-500' : 'ring-transparent opacity-40'} ${dragIdx === i ? 'opacity-50' : ''}`}>
-                <img src={img.url} alt="" className="h-full w-full object-cover" />
+                {isVideo(img)
+                  ? <video src={img.url} className="h-full w-full object-cover" muted />
+                  : <img src={img.url} alt="" className="h-full w-full object-cover" />}
                 {img.kept
                   ? <span className="absolute left-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-brand-600 text-[9px] font-bold text-white">{ordered.filter((x, idx) => x.kept && idx <= i).length}</span>
                   : <div className="absolute inset-0 flex items-center justify-center bg-rose-500/40"><X className="h-6 w-6 text-white" /></div>}
@@ -310,8 +317,8 @@ function ResubmitModal({ request, onClose, onDone }) {
           </div>
         </div>
         <div>
-          <span className="mb-1.5 block text-sm font-medium text-slate-600 dark:text-slate-300">Add new images</span>
-          <FileDropzone multiple reorderable accept="image/*" files={newImages} onChange={setNewImages} label="Drop new images" />
+          <span className="mb-1.5 block text-sm font-medium text-slate-600 dark:text-slate-300">Add new media</span>
+          <FileDropzone multiple reorderable accept="image/*,video/*" files={newImages} onChange={setNewImages} label="Drop new images or videos" />
         </div>
         <textarea className="input-base min-h-[70px]" placeholder="Caption" value={form.caption} onChange={(e) => setForm({ ...form, caption: e.target.value })} />
         <textarea className="input-base min-h-[70px]" placeholder="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />

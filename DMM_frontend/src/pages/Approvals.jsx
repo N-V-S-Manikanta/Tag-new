@@ -2,14 +2,14 @@ import { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
-import { Plus, Search, Inbox, Images as ImagesIcon } from 'lucide-react';
+import { Plus, Search, Inbox, Images as ImagesIcon, Play } from 'lucide-react';
 import { approvalApi } from '../api/endpoints.js';
 import { useAuthStore } from '../store/authStore.js';
 import PageHeader from '../components/layout/PageHeader.jsx';
 import { Button } from '../components/ui/Button.jsx';
 import { Card, Input, Select, Badge, Avatar, Skeleton, EmptyState } from '../components/ui/primitives.jsx';
 import CreateApprovalModal from '../components/approvals/CreateApprovalModal.jsx';
-import { formatDate } from '../lib/utils.js';
+import { formatDate, isVideo } from '../lib/utils.js';
 
 const STATUSES = ['All', 'PENDING', 'APPROVED', 'REJECTED', 'RESUBMITTED', 'POSTED'];
 const PLATFORMS = ['All', 'LinkedIn', 'Instagram', 'YouTube', 'Facebook'];
@@ -83,7 +83,14 @@ export default function Approvals() {
               <Card className="group cursor-pointer overflow-hidden transition hover:shadow-glow" onClick={() => navigate(`/approvals/${r._id}`)}>
                 <div className="relative aspect-video overflow-hidden bg-slate-100 dark:bg-slate-800">
                   {r.images?.[0] ? (
-                    <img src={r.images[0].url} alt={r.title} className="h-full w-full object-cover transition group-hover:scale-105" />
+                    isVideo(r.images[0]) ? (
+                      <>
+                        <video src={r.images[0].url} className="h-full w-full object-cover" muted />
+                        <span className="absolute inset-0 flex items-center justify-center bg-black/25"><Play className="h-9 w-9 text-white" /></span>
+                      </>
+                    ) : (
+                      <img src={r.images[0].url} alt={r.title} className="h-full w-full object-cover transition group-hover:scale-105" />
+                    )
                   ) : (
                     <div className="flex h-full items-center justify-center"><ImagesIcon className="h-10 w-10 text-slate-300" /></div>
                   )}

@@ -6,6 +6,7 @@ const storage = multer.memoryStorage();
 
 const ALLOWED = {
   image: ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/gif', 'image/svg+xml'],
+  video: ['video/mp4', 'video/webm', 'video/quicktime', 'video/x-matroska', 'video/ogg', 'video/x-m4v'],
   doc: [
     'application/pdf',
     'application/vnd.ms-powerpoint',
@@ -17,7 +18,7 @@ const ALLOWED = {
 };
 
 const fileFilter = (req, file, cb) => {
-  const all = [...ALLOWED.image, ...ALLOWED.doc];
+  const all = [...ALLOWED.image, ...ALLOWED.video, ...ALLOWED.doc];
   if (all.includes(file.mimetype)) return cb(null, true);
   cb(new Error(`Unsupported file type: ${file.mimetype}`));
 };
@@ -25,7 +26,7 @@ const fileFilter = (req, file, cb) => {
 const upload = multer({
   storage,
   fileFilter,
-  limits: { fileSize: 25 * 1024 * 1024 }, // 25 MB
+  limits: { fileSize: 100 * 1024 * 1024 }, // 100 MB (videos are larger than images)
 });
 
 export default upload;

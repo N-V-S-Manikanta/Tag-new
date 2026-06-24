@@ -18,6 +18,10 @@ export const formatNumber = (n) => {
 export const initials = (name = '') =>
   name.split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase();
 
+// Is this approval media item a video? Checks stored mediaType or URL extension.
+export const isVideo = (m) =>
+  m?.mediaType === 'video' || /\.(mp4|webm|mov|m4v|ogg|mkv)$/i.test(m?.url || '');
+
 export const ROLE_STYLES = {
   ADMIN: 'bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-400',
   CEO: 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400',

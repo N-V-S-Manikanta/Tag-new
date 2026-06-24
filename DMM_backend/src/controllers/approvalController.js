@@ -135,7 +135,8 @@ export const createApproval = asyncHandler(async (req, res) => {
   for (let i = 0; i < files.length; i++) {
     const f = files[i];
     const up = await uploadBuffer(f.buffer, { folder: 'approvals', originalName: f.originalname });
-    imageDocs.push({ request: request._id, url: up.url, publicId: up.publicId, order: orderArr?.[i] ?? i });
+    const mediaType = f.mimetype?.startsWith('video/') ? 'video' : 'image';
+    imageDocs.push({ request: request._id, url: up.url, publicId: up.publicId, mediaType, order: orderArr?.[i] ?? i });
   }
   if (imageDocs.length) await ApprovalImage.insertMany(imageDocs);
   request.imageCount = imageDocs.length;
@@ -238,7 +239,8 @@ export const resubmitRequest = asyncHandler(async (req, res) => {
   for (let i = 0; i < files.length; i++) {
     const f = files[i];
     const up = await uploadBuffer(f.buffer, { folder: 'approvals', originalName: f.originalname });
-    newDocs.push({ request: request._id, url: up.url, publicId: up.publicId, order: existingCount + i });
+    const mediaType = f.mimetype?.startsWith('video/') ? 'video' : 'image';
+    newDocs.push({ request: request._id, url: up.url, publicId: up.publicId, mediaType, order: existingCount + i });
   }
   if (newDocs.length) await ApprovalImage.insertMany(newDocs);
 

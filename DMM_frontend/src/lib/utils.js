@@ -26,6 +26,13 @@ export const formatBytes = (bytes) => {
 export const initials = (name = '') =>
   name.split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase();
 
+// Is this approval media item (or a raw File) a video? Checks the stored
+// mediaType, the File mime type, or the URL/name extension as a fallback.
+export const isVideo = (m) =>
+  m?.mediaType === 'video' ||
+  (typeof m?.type === 'string' && m.type.startsWith('video/')) ||
+  /\.(mp4|webm|mov|m4v|ogg|mkv)$/i.test(m?.url || m?.name || '');
+
 // Status -> tailwind color classes (badges, dots)
 export const STATUS_STYLES = {
   PENDING: 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400',

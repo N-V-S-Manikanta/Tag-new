@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { UploadCloud, X, GripVertical } from 'lucide-react';
+import { UploadCloud, X, GripVertical, Film } from 'lucide-react';
 import { cn, formatBytes } from '../../lib/utils.js';
 
 // Reusable drag & drop file input. `multiple` toggles single vs many files.
@@ -66,6 +66,11 @@ export default function FileDropzone({ multiple = false, accept, files, onChange
                 {reorderable && <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-brand-100 dark:bg-brand-500/20 text-[10px] font-bold text-brand-600">{i + 1}</span>}
                 {f.type?.startsWith('image/') && (
                   <img src={URL.createObjectURL(f)} alt="" className="h-8 w-8 rounded object-cover" />
+                )}
+                {f.type?.startsWith('video/') && (
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-slate-200 dark:bg-slate-700">
+                    <Film className="h-4 w-4 text-slate-500" />
+                  </span>
                 )}
                 <span className="truncate text-sm text-slate-600 dark:text-slate-300">{f.name}</span>
                 <span className="shrink-0 text-xs text-slate-400">{formatBytes(f.size)}</span>

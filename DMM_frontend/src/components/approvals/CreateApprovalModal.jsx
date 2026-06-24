@@ -15,7 +15,7 @@ export default function CreateApprovalModal({ onClose, onSaved }) {
 
   const submit = async (e) => {
     e.preventDefault();
-    if (images.length === 0) { toast.error('Please add at least one image'); return; }
+    if (images.length === 0) { toast.error('Please add at least one image or video'); return; }
     setLoading(true);
     try {
       const fd = new FormData();
@@ -44,8 +44,8 @@ export default function CreateApprovalModal({ onClose, onSaved }) {
         </div>
 
         <div>
-          <span className="mb-1.5 block text-sm font-medium text-slate-600 dark:text-slate-300">Images (drag & drop, multiple, reorderable)</span>
-          <FileDropzone multiple reorderable accept="image/*" files={images} onChange={setImages} label="Drop images here or click to browse" />
+          <span className="mb-1.5 block text-sm font-medium text-slate-600 dark:text-slate-300">Images & videos (drag & drop, multiple, reorderable)</span>
+          <FileDropzone multiple reorderable accept="image/*,video/*" files={images} onChange={setImages} label="Drop images or videos here or click to browse" />
         </div>
 
         <textarea className="input-base min-h-[70px]" placeholder="Caption" value={form.caption} onChange={(e) => setForm({ ...form, caption: e.target.value })} />

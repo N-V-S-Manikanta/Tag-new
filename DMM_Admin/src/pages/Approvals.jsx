@@ -3,14 +3,14 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import {
   Inbox, Search, Images as ImagesIcon, Check, X, Plus, Trash2, Hash,
-  MessageSquareWarning, Building2, Clock,
+  MessageSquareWarning, Building2, Clock, Play,
 } from 'lucide-react';
 import { approvalApi, organizationApi } from '../api/endpoints.js';
 import PageHeader from '../components/layout/PageHeader.jsx';
 import { Button } from '../components/ui/Button.jsx';
 import { Card, Input, Select, Avatar, Skeleton, EmptyState } from '../components/ui/primitives.jsx';
 import { Modal } from '../components/ui/Modal.jsx';
-import { formatDate, formatDateTime, timeAgo, cn } from '../lib/utils.js';
+import { formatDate, formatDateTime, timeAgo, cn, isVideo } from '../lib/utils.js';
 
 const STATUS_OPTS = [
   { value: 'REVIEW', label: 'Needs review' },
@@ -99,7 +99,14 @@ export default function Approvals() {
               <Card key={r._id} className="group cursor-pointer overflow-hidden transition hover:shadow-glow" onClick={() => setOpenId(r._id)}>
                 <div className="relative aspect-video overflow-hidden bg-slate-100 dark:bg-slate-800">
                   {r.images?.[0] ? (
-                    <img src={r.images[0].url} alt={r.title} className="h-full w-full object-cover transition group-hover:scale-105" />
+                    isVideo(r.images[0]) ? (
+                      <>
+                        <video src={r.images[0].url} className="h-full w-full object-cover" muted />
+                        <span className="absolute inset-0 flex items-center justify-center bg-black/25"><Play className="h-9 w-9 text-white" /></span>
+                      </>
+                    ) : (
+                      <img src={r.images[0].url} alt={r.title} className="h-full w-full object-cover transition group-hover:scale-105" />
+                    )
                   ) : (
                     <div className="flex h-full items-center justify-center"><ImagesIcon className="h-10 w-10 text-slate-300" /></div>
                   )}
@@ -174,13 +181,19 @@ function ApprovalDetailModal({ id, onClose }) {
             {/* Gallery */}
             <div className="overflow-hidden rounded-xl border border-slate-100 dark:border-slate-800">
               <div className="relative flex aspect-video items-center justify-center bg-slate-100 dark:bg-slate-800">
-                {images[activeImg] ? <img src={images[activeImg].url} alt="" className="h-full w-full object-contain" /> : <span className="text-slate-300">No image</span>}
+                {images[activeImg]
+                  ? (isVideo(images[activeImg])
+                      ? <video src={images[activeImg].url} controls className="h-full w-full object-contain" />
+                      : <img src={images[activeImg].url} alt="" className="h-full w-full object-contain" />)
+                  : <span className="text-slate-300">No media</span>}
               </div>
               {images.length > 1 && (
                 <div className="flex gap-2 overflow-x-auto p-3">
                   {images.map((img, i) => (
-                    <button key={img._id} onClick={() => setActiveImg(i)} className={cn('h-14 w-14 shrink-0 overflow-hidden rounded-lg ring-2 transition', i === activeImg ? 'ring-brand-500' : 'ring-transparent opacity-70 hover:opacity-100')}>
-                      <img src={img.url} alt="" className="h-full w-full object-cover" />
+                    <button key={img._id} onClick={() => setActiveImg(i)} className={cn('relative h-14 w-14 shrink-0 overflow-hidden rounded-lg ring-2 transition', i === activeImg ? 'ring-brand-500' : 'ring-transparent opacity-70 hover:opacity-100')}>
+                      {isVideo(img)
+                        ? <><video src={img.url} className="h-full w-full object-cover" muted /><span className="absolute inset-0 flex items-center justify-center bg-black/30"><Play className="h-4 w-4 text-white" /></span></>
+                        : <img src={img.url} alt="" className="h-full w-full object-cover" />}
                     </button>
                   ))}
                 </div>

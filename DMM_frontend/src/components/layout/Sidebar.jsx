@@ -46,7 +46,7 @@ export default function Sidebar({ open, onClose }) {
             ) : (
               // No org logo uploaded yet — fall back to the Tag logo.
               <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white ring-1 ring-slate-200 dark:ring-slate-700">
-                <img src="/logo.jpeg" alt="Tag" className="h-full w-full object-contain p-0.5" />
+                <img src="/logo.png" alt="Tag" className="h-full w-full object-contain p-0.5" />
               </div>
             )}
             <div className="min-w-0">

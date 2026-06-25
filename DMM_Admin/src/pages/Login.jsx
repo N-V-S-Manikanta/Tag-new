@@ -32,7 +32,7 @@ export default function Login() {
         <div className="absolute -right-20 -top-20 h-80 w-80 rounded-full bg-brand-500/20 blur-3xl" />
         <div className="absolute -bottom-32 -left-20 h-96 w-96 rounded-full bg-brand-400/20 blur-3xl" />
         <div className="relative flex items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl bg-white"><img src="/logo.jpeg" alt="Tag" className="h-full w-full object-contain p-1" /></div>
+          <div className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl bg-white"><img src="/logo.png" alt="Tag" className="h-full w-full object-contain p-1" /></div>
           <span className="text-lg font-bold">Tag — Admin</span>
         </div>
         <div className="relative">

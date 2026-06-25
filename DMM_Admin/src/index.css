@@ -23,11 +23,12 @@ body {
       px-3.5 py-2.5 text-sm outline-none transition
       focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 placeholder:text-slate-400;
   }
+  /* Sidebar is navy in both themes — links are light, active is orange. */
   .sidebar-link {
-    @apply flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm font-medium text-slate-500
-      dark:text-slate-400 transition-all hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white;
+    @apply flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm font-medium text-slate-300
+      transition-all hover:bg-white/10 hover:text-white;
   }
   .sidebar-link-active {
-    @apply bg-brand-600 text-white hover:bg-brand-600 hover:text-white;
+    @apply bg-brand-600 text-white shadow-sm hover:bg-brand-600 hover:text-white;
   }
 }

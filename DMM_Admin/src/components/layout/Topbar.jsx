@@ -18,7 +18,7 @@ export default function Topbar({ onMenu }) {
       </button>
 
       <div className="hidden items-center gap-2 md:flex">
-        <span className="rounded-full bg-brand-50 dark:bg-brand-500/10 px-3 py-1 text-xs font-semibold text-brand-600">Administrator Console</span>
+        <span className="rounded-full bg-brand-100 dark:bg-brand-500/15 px-3 py-1 text-xs font-bold text-brand-800 dark:text-brand-300">Administrator Console</span>
       </div>
 
       <div className="ml-auto flex items-center gap-1.5">

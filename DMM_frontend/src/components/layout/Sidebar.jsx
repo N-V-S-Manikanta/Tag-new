@@ -23,6 +23,11 @@ const MAIN_NAV = [
   { to: '/settings', label: 'Settings', icon: Settings },
 ];
 
+// The "t@g" wordmark with the @ in brand orange.
+const Wordmark = () => (
+  <span className="lowercase tracking-tight">t<span className="text-brand-500">@</span>g</span>
+);
+
 export default function Sidebar({ open, onClose }) {
   const { user } = useAuthStore();
   const org = user?.organization;
@@ -35,26 +40,25 @@ export default function Sidebar({ open, onClose }) {
 
       <aside
         className={cn(
-          'fixed inset-y-0 left-0 z-40 flex w-72 flex-col border-r border-slate-200/70 dark:border-slate-800 bg-white dark:bg-slate-900 transition-transform lg:translate-x-0',
+          'fixed inset-y-0 left-0 z-40 flex w-72 flex-col border-r border-white/5 bg-gradient-to-b from-[#0b2350] to-[#08152e] transition-transform lg:translate-x-0',
           open ? 'translate-x-0' : '-translate-x-full'
         )}
       >
         <div className="flex h-16 items-center justify-between px-5">
           <div className="flex min-w-0 items-center gap-2.5">
-            {org?.logo ? (
-              <img src={org.logo} alt={org.name} className="h-9 w-9 shrink-0 rounded-xl object-cover" />
-            ) : (
-              // No org logo uploaded yet — fall back to the Tag logo.
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white ring-1 ring-slate-200 dark:ring-slate-700">
-                <img src="/logo.png" alt="Tag" className="h-full w-full object-contain p-0.5" />
-              </div>
-            )}
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white shadow-sm">
+              {org?.logo
+                ? <img src={org.logo} alt={org.name} className="h-full w-full object-cover" />
+                : <img src="/logo.png" alt="t@g" className="h-full w-full object-contain p-1" />}
+            </div>
             <div className="min-w-0">
-              <p className="truncate text-sm font-extrabold leading-tight text-slate-800 dark:text-white">{org?.name || 'Tag'}</p>
+              <p className="truncate text-base font-extrabold leading-tight text-white">
+                {org?.name || <Wordmark />}
+              </p>
               <p className="text-[11px] text-slate-400">Marketing Suite</p>
             </div>
           </div>
-          <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 lg:hidden">
+          <button onClick={onClose} className="rounded-lg p-1.5 text-slate-300 hover:bg-white/10 lg:hidden">
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -68,13 +72,13 @@ export default function Sidebar({ open, onClose }) {
           ))}
         </nav>
 
-        <div className="border-t border-slate-100 dark:border-slate-800 p-4">
-          <div className="flex items-center gap-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 p-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-100 dark:bg-brand-500/20 text-xs font-bold text-brand-600">
+        <div className="border-t border-white/10 p-4">
+          <div className="flex items-center gap-2.5 rounded-xl bg-white/5 p-3">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-500/20 text-xs font-bold text-brand-300">
               {user?.role?.[0]}
             </div>
             <div className="min-w-0">
-              <p className="truncate text-xs font-semibold text-slate-700 dark:text-slate-200">{user?.name}</p>
+              <p className="truncate text-xs font-semibold text-white">{user?.name}</p>
               <p className="text-[11px] text-slate-400">{user?.role}</p>
             </div>
           </div>

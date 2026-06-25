@@ -32,6 +32,7 @@ const approvalRequestSchema = new mongoose.Schema(
     platform: { type: String, enum: PLATFORMS, required: true },
     caption: { type: String, default: '' },
     description: { type: String, default: '' },
+    aspectRatio: { type: String, default: '' }, // e.g. "1:1", "4:5", "9:16", "16:9"
     hashtags: [{ type: String }],
     reviews: [reviewSchema],
     imageCount: { type: Number, default: 0 }, // denormalized for quick list rendering

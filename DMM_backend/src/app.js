@@ -17,6 +17,9 @@ import activityRoutes from './routes/activityRoutes.js';
 import searchRoutes from './routes/searchRoutes.js';
 import analyticsRoutes from './routes/analyticsRoutes.js';
 import competitorRoutes from './routes/competitorRoutes.js';
+import purchaseRoutes from './routes/purchaseRoutes.js';
+import brandAssetRoutes from './routes/brandAssetRoutes.js';
+import socialAccountRoutes from './routes/socialAccountRoutes.js';
 import organizationRoutes from './routes/organizationRoutes.js';
 import calendarRoutes from './routes/calendarRoutes.js';
 
@@ -63,6 +66,9 @@ app.use('/api/activity', activityRoutes);
 app.use('/api/search', searchRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/competitors', competitorRoutes);
+app.use('/api/purchases', purchaseRoutes);
+app.use('/api/brand', brandAssetRoutes);
+app.use('/api/social-accounts', socialAccountRoutes);
 app.use('/api/organizations', organizationRoutes);
 app.use('/api/calendar', calendarRoutes);
 

@@ -2,6 +2,7 @@ import express from 'express';
 import {
   getOrganizations,
   getOrganization,
+  getOrganizationGoal,
   createOrganization,
   updateOrganization,
   deleteOrganization,
@@ -12,6 +13,9 @@ import { ROLES } from '../config/constants.js';
 
 const router = express.Router();
 router.use(protect);
+
+// Goal + progress: any authenticated user (controller restricts CEO/USER to own org).
+router.get('/:id/goal', getOrganizationGoal);
 
 // All organization management is ADMIN-only.
 router.route('/')

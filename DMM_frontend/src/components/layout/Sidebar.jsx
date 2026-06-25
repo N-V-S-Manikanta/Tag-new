@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard, FileImage, Images, CheckSquare, BarChart3, CalendarDays,
-  FileText, Bell, Settings, X, TrendingUp,
+  FileText, Bell, Settings, X, TrendingUp, Palette, Share2, ShoppingBag,
 } from 'lucide-react';
 import { cn, initials } from '../../lib/utils.js';
 import { useAuthStore } from '../../store/authStore.js';
@@ -10,7 +10,10 @@ const MAIN_NAV = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/templates', label: 'Templates', icon: FileImage },
   { to: '/assets', label: 'Assets', icon: Images },
+  { to: '/brand-library', label: 'Brand Library', icon: Palette },
   { to: '/approvals', label: 'Approvals', icon: CheckSquare },
+  { to: '/social-handlers', label: 'Social Handlers', icon: Share2 },
+  { to: '/premium-packs', label: 'Premium Packs', icon: ShoppingBag },
   { to: '/calendar', label: 'Calendar', icon: CalendarDays },
   { to: '/social-analytics', label: 'Social Analytics', icon: TrendingUp },
   { to: '/approval-analytics', label: 'Approval Analytics', icon: BarChart3 },

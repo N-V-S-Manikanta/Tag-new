@@ -15,6 +15,8 @@ export const organizationApi = {
   update: (id, formData) =>
     api.put(`/organizations/${id}`, formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data),
   remove: (id) => api.delete(`/organizations/${id}`).then((r) => r.data),
+  goal: (id) => api.get(`/organizations/${id}/goal`).then((r) => r.data),
+  setGoal: (id, goal) => api.put(`/organizations/${id}`, { goal }).then((r) => r.data),
 };
 
 export const userApi = {
@@ -54,6 +56,30 @@ export const approvalApi = {
   approve: (id) => api.put(`/approvals/${id}/approve`).then((r) => r.data),
   reject: (id, feedbackPoints) => api.put(`/approvals/${id}/reject`, { feedbackPoints }).then((r) => r.data),
   remove: (id) => api.delete(`/approvals/${id}`).then((r) => r.data),
+};
+
+// Premium packs / purchases — org-scoped (active org via header).
+export const purchaseApi = {
+  list: () => api.get('/purchases').then((r) => r.data),
+  create: (data) => api.post('/purchases', data).then((r) => r.data),
+  update: (id, data) => api.put(`/purchases/${id}`, data).then((r) => r.data),
+  remove: (id) => api.delete(`/purchases/${id}`).then((r) => r.data),
+};
+
+// Brand Library — flyers / brochures / branding videos (file or link).
+export const brandApi = {
+  list: (params) => api.get('/brand', { params }).then((r) => r.data),
+  create: (formData) => api.post('/brand', formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data),
+  update: (id, data) => api.put(`/brand/${id}`, data).then((r) => r.data),
+  remove: (id) => api.delete(`/brand/${id}`).then((r) => r.data),
+};
+
+// Social media accounts / handlers directory.
+export const socialAccountApi = {
+  list: (params) => api.get('/social-accounts', { params }).then((r) => r.data),
+  create: (data) => api.post('/social-accounts', data).then((r) => r.data),
+  update: (id, data) => api.put(`/social-accounts/${id}`, data).then((r) => r.data),
+  remove: (id) => api.delete(`/social-accounts/${id}`).then((r) => r.data),
 };
 
 export const calendarApi = {

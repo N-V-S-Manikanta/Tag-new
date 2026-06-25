@@ -13,6 +13,7 @@ const sanitize = (u) => ({
   role: u.role,
   avatar: u.avatar,
   jobTitle: u.jobTitle,
+  skills: u.skills || [],
   isActive: u.isActive,
   settings: u.settings,
   organization: u.organization || null,
@@ -21,6 +22,13 @@ const sanitize = (u) => ({
 
 // ADMIN is global; CEO/USER must belong to an organization.
 const roleNeedsOrg = (role) => role === ROLES.CEO || role === ROLES.USER;
+
+// Accept skills as an array or a comma/newline-separated string.
+const parseSkills = (raw) => {
+  if (!raw) return [];
+  const arr = Array.isArray(raw) ? raw : String(raw).split(/[,\n]/);
+  return arr.map((s) => String(s).trim()).filter(Boolean).slice(0, 30);
+};
 
 // ============================ ADMIN ============================
 
@@ -40,7 +48,7 @@ export const getUsers = asyncHandler(async (req, res) => {
 
 // @route POST /api/users  (ADMIN) — create a new user
 export const createUser = asyncHandler(async (req, res) => {
-  const { name, email, password, role, jobTitle, organization } = req.body;
+  const { name, email, password, role, jobTitle, organization, skills } = req.body;
   if (!name || !email || !password) {
     res.status(400);
     throw new Error('Name, email and password are required');
@@ -67,7 +75,7 @@ export const createUser = asyncHandler(async (req, res) => {
     res.status(400);
     throw new Error('A user with this email already exists');
   }
-  const user = await User.create({ name, email, password, role: finalRole, jobTitle: jobTitle || '', organization: orgId });
+  const user = await User.create({ name, email, password, role: finalRole, jobTitle: jobTitle || '', skills: parseSkills(skills), organization: orgId });
 
   logActivity({ user: req.user._id, organization: orgId, action: ACTIVITY_ACTIONS.USER_CREATED, description: `Created user "${name}" (${user.role})`, entityType: 'User', entityId: user._id });
 
@@ -97,7 +105,7 @@ export const updateUser = asyncHandler(async (req, res) => {
   const user = await User.findById(req.params.id);
   if (!user) { res.status(404); throw new Error('User not found'); }
 
-  const { name, role, jobTitle, isActive, organization } = req.body;
+  const { name, role, jobTitle, isActive, organization, skills } = req.body;
 
   // Guard: don't allow removing the last active admin or self-demotion lockout
   if (role && role !== user.role && user.role === ROLES.ADMIN && role !== ROLES.ADMIN) {
@@ -111,6 +119,7 @@ export const updateUser = asyncHandler(async (req, res) => {
 
   if (name) user.name = name;
   if (jobTitle !== undefined) user.jobTitle = jobTitle;
+  if (skills !== undefined) user.skills = parseSkills(skills);
   if (typeof isActive === 'boolean') user.isActive = isActive;
 
   const nextRole = role && Object.values(ROLES).includes(role) ? role : user.role;

@@ -116,12 +116,13 @@ export const getApproval = asyncHandler(async (req, res) => {
 // @route POST /api/approvals  — create new request (status PENDING)
 export const createApproval = asyncHandler(async (req, res) => {
   const orgId = requireOrgId(req, res);
-  const { title, platform, caption, description, hashtags, order } = req.body;
+  const { title, platform, caption, description, hashtags, order, aspectRatio } = req.body;
   if (!title || !platform) { res.status(400); throw new Error('Title and platform are required'); }
 
   const request = await ApprovalRequest.create({
     organization: orgId,
     title, platform, caption, description,
+    aspectRatio: aspectRatio || '',
     hashtags: parseHashtags(hashtags),
     status: APPROVAL_STATUS.PENDING,
     createdBy: req.user._id,

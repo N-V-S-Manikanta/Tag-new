@@ -20,6 +20,8 @@ const userSchema = new mongoose.Schema(
     avatar: { type: String, default: '' },
     avatarPublicId: { type: String, default: '' },
     jobTitle: { type: String, default: '' },
+    // Skill set, e.g. ["Video Editing", "Photo Editing", "Photography"].
+    skills: [{ type: String, trim: true }],
     isActive: { type: Boolean, default: true },
     settings: {
       theme: { type: String, enum: ['light', 'dark'], default: 'light' },

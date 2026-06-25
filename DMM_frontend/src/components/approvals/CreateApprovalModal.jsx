@@ -7,9 +7,17 @@ import { Input, Select } from '../ui/primitives.jsx';
 import FileDropzone from '../ui/FileDropzone.jsx';
 
 const PLATFORMS = ['LinkedIn', 'Instagram', 'YouTube', 'Facebook'];
+// Common social aspect ratios, with a hint of where each is used.
+const RATIOS = [
+  { value: '1:1', label: '1:1 — Square (feed)' },
+  { value: '4:5', label: '4:5 — Portrait (feed)' },
+  { value: '9:16', label: '9:16 — Story / Reel / Short' },
+  { value: '16:9', label: '16:9 — Landscape (YouTube)' },
+  { value: '1.91:1', label: '1.91:1 — Link / landscape' },
+];
 
 export default function CreateApprovalModal({ onClose, onSaved }) {
-  const [form, setForm] = useState({ title: '', platform: 'LinkedIn', caption: '', description: '', hashtags: '' });
+  const [form, setForm] = useState({ title: '', platform: 'LinkedIn', caption: '', description: '', hashtags: '', aspectRatio: '1:1' });
   const [images, setImages] = useState([]);
   const [loading, setLoading] = useState(false);
 
@@ -24,6 +32,7 @@ export default function CreateApprovalModal({ onClose, onSaved }) {
       fd.append('caption', form.caption);
       fd.append('description', form.description);
       fd.append('hashtags', form.hashtags);
+      fd.append('aspectRatio', form.aspectRatio);
       images.forEach((img) => fd.append('images', img));
       await approvalApi.create(fd);
       toast.success('Approval request submitted');
@@ -42,6 +51,10 @@ export default function CreateApprovalModal({ onClose, onSaved }) {
             {PLATFORMS.map((p) => <option key={p} value={p}>{p}</option>)}
           </Select>
         </div>
+
+        <Select label="Image / video ratio" value={form.aspectRatio} onChange={(e) => setForm({ ...form, aspectRatio: e.target.value })}>
+          {RATIOS.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+        </Select>
 
         <div>
           <span className="mb-1.5 block text-sm font-medium text-slate-600 dark:text-slate-300">Images & videos (drag & drop, multiple, reorderable)</span>

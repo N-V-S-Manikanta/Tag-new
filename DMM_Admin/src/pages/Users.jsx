@@ -106,6 +106,14 @@ export default function Users() {
                           <div>
                             <p className="font-semibold text-slate-700 dark:text-slate-200">{u.name} {isSelf && <span className="text-xs font-normal text-slate-400">(you)</span>}</p>
                             <p className="text-xs text-slate-400">{u.email}{u.jobTitle ? ` · ${u.jobTitle}` : ''}</p>
+                            {u.skills?.length > 0 && (
+                              <div className="mt-1 flex flex-wrap gap-1">
+                                {u.skills.slice(0, 4).map((s, i) => (
+                                  <span key={i} className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-400">{s}</span>
+                                ))}
+                                {u.skills.length > 4 && <span className="text-[10px] text-slate-400">+{u.skills.length - 4}</span>}
+                              </div>
+                            )}
                           </div>
                         </div>
                       </td>
@@ -166,6 +174,7 @@ function UserFormModal({ editUser, onClose, onSaved }) {
   const [form, setForm] = useState({
     name: editUser?.name || '', email: editUser?.email || '', password: '',
     role: editUser?.role || 'USER', jobTitle: editUser?.jobTitle || '',
+    skills: (editUser?.skills || []).join(', '),
     organization: editUser?.organization?._id || editUser?.organization || '',
   });
   const [loading, setLoading] = useState(false);
@@ -179,7 +188,7 @@ function UserFormModal({ editUser, onClose, onSaved }) {
     setLoading(true);
     try {
       const payload = {
-        name: form.name, role: form.role, jobTitle: form.jobTitle,
+        name: form.name, role: form.role, jobTitle: form.jobTitle, skills: form.skills,
         organization: needsOrg ? form.organization : null,
       };
       if (editUser) { await userApi.update(editUser._id, payload); toast.success('User updated'); }
@@ -201,6 +210,14 @@ function UserFormModal({ editUser, onClose, onSaved }) {
           </Select>
           <Input label="Job title" value={form.jobTitle} onChange={(e) => setForm({ ...form, jobTitle: e.target.value })} placeholder="e.g. Manager" />
         </div>
+        <Input label="Skill set (comma separated)" value={form.skills} onChange={(e) => setForm({ ...form, skills: e.target.value })} placeholder="e.g. Video Editing, Photo Editing, Photography" />
+        {form.skills.trim() && (
+          <div className="flex flex-wrap gap-1.5">
+            {form.skills.split(',').map((s) => s.trim()).filter(Boolean).map((s, i) => (
+              <span key={i} className="rounded-full bg-brand-50 px-2 py-0.5 text-xs font-medium text-brand-700 dark:bg-brand-500/10 dark:text-brand-300">{s}</span>
+            ))}
+          </div>
+        )}
         {needsOrg ? (
           <Select label="Organization" value={form.organization} onChange={(e) => setForm({ ...form, organization: e.target.value })}>
             <option value="">Select an organization…</option>

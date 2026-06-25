@@ -14,6 +14,10 @@ import Organizations from './pages/Organizations.jsx';
 import Users from './pages/Users.jsx';
 import Approvals from './pages/Approvals.jsx';
 import Analytics from './pages/Analytics.jsx';
+import BrandLibrary from './pages/BrandLibrary.jsx';
+import SocialAccounts from './pages/SocialAccounts.jsx';
+import Purchases from './pages/Purchases.jsx';
+import Goals from './pages/Goals.jsx';
 import Calendar from './pages/Calendar.jsx';
 import ActivityLogs from './pages/ActivityLogs.jsx';
 import Settings from './pages/Settings.jsx';
@@ -67,6 +71,10 @@ export default function App() {
         <Route path="/users" element={<Users />} />
         <Route path="/approvals" element={<Approvals />} />
         <Route path="/analytics" element={<Analytics />} />
+        <Route path="/brand-library" element={<BrandLibrary />} />
+        <Route path="/social-accounts" element={<SocialAccounts />} />
+        <Route path="/purchases" element={<Purchases />} />
+        <Route path="/goals" element={<Goals />} />
         <Route path="/calendar" element={<Calendar />} />
         <Route path="/activity" element={<ActivityLogs />} />
         <Route path="/settings" element={<Settings />} />

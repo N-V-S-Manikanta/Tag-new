@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Building2, Users, Activity, BarChart3, CalendarDays, Settings, X, ShieldCheck, CheckSquare } from 'lucide-react';
+import { LayoutDashboard, Building2, Users, Activity, BarChart3, CalendarDays, Settings, X, ShieldCheck, CheckSquare, Images, Share2, ShoppingBag, Target } from 'lucide-react';
 import { cn } from '../../lib/utils.js';
 import { useAuthStore } from '../../store/authStore.js';
 
@@ -9,6 +9,10 @@ const NAV = [
   { to: '/users', label: 'User Management', icon: Users },
   { to: '/approvals', label: 'Approvals', icon: CheckSquare },
   { to: '/analytics', label: 'Social Analytics', icon: BarChart3 },
+  { to: '/social-accounts', label: 'Social Handlers', icon: Share2 },
+  { to: '/brand-library', label: 'Brand Library', icon: Images },
+  { to: '/purchases', label: 'Premium Packs', icon: ShoppingBag },
+  { to: '/goals', label: 'Yearly Goals', icon: Target },
   { to: '/calendar', label: 'Posting Calendar', icon: CalendarDays },
   { to: '/activity', label: 'Activity Logs', icon: Activity },
   { to: '/settings', label: 'Settings', icon: Settings },

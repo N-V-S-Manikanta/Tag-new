@@ -4,8 +4,9 @@ import User from '../models/User.js';
 import Template from '../models/Template.js';
 import Asset from '../models/Asset.js';
 import ApprovalRequest from '../models/ApprovalRequest.js';
+import Analytics from '../models/Analytics.js';
 import { uploadBuffer, deleteFile } from '../config/storage.js';
-import { APPROVAL_STATUS } from '../config/constants.js';
+import { APPROVAL_STATUS, PLATFORMS, ROLES } from '../config/constants.js';
 
 // @route GET /api/organizations  — list all (ADMIN). Includes quick member/post counts.
 export const getOrganizations = asyncHandler(async (req, res) => {
@@ -40,6 +41,38 @@ export const getOrganization = asyncHandler(async (req, res) => {
   res.json({ success: true, organization: { ...org, stats: { members, templates, assets, posts } } });
 });
 
+// @route GET /api/organizations/:id/goal — yearly goal + live progress
+// (current followers from latest analytics, posts published in the goal year).
+export const getOrganizationGoal = asyncHandler(async (req, res) => {
+  // CEO/USER may only read their own organization's goal.
+  if (req.user.role !== ROLES.ADMIN) {
+    const own = req.user.organization?._id || req.user.organization;
+    if (String(own) !== String(req.params.id)) { res.status(403); throw new Error('Not allowed'); }
+  }
+  const org = await Organization.findById(req.params.id).lean();
+  if (!org) { res.status(404); throw new Error('Organization not found'); }
+  const goal = org.goal || { year: 0, targetFollowers: 0, targetPosts: 0, note: '' };
+  const year = goal.year || new Date().getFullYear();
+
+  // Current followers = sum of the latest snapshot's followers across platforms.
+  let currentFollowers = 0;
+  for (const platform of PLATFORMS) {
+    const snap = await Analytics.findOne({ organization: org._id, platform }).sort({ date: -1 }).lean();
+    currentFollowers += (snap?.followers || 0) + (snap?.subscribers || 0);
+  }
+
+  // Posts published in the goal year (posted approvals).
+  const start = new Date(`${year}-01-01T00:00:00.000Z`);
+  const end = new Date(`${year}-12-31T23:59:59.999Z`);
+  const currentPosts = await ApprovalRequest.countDocuments({
+    organization: org._id,
+    status: APPROVAL_STATUS.POSTED,
+    postedAt: { $gte: start, $lte: end },
+  });
+
+  res.json({ success: true, goal, year, progress: { currentFollowers, currentPosts } });
+});
+
 // @route POST /api/organizations  (ADMIN)
 export const createOrganization = asyncHandler(async (req, res) => {
   const { name, description, website, color } = req.body;
@@ -71,7 +104,7 @@ export const updateOrganization = asyncHandler(async (req, res) => {
   const org = await Organization.findById(req.params.id);
   if (!org) { res.status(404); throw new Error('Organization not found'); }
 
-  const { name, description, website, color, isActive } = req.body;
+  const { name, description, website, color, isActive, goal } = req.body;
   if (name && name.trim() !== org.name) {
     const dup = await Organization.findOne({ name: name.trim(), _id: { $ne: org._id } });
     if (dup) { res.status(400); throw new Error('An organization with this name already exists'); }
@@ -81,6 +114,14 @@ export const updateOrganization = asyncHandler(async (req, res) => {
   if (website !== undefined) org.website = website;
   if (color) org.color = color;
   if (typeof isActive === 'boolean') org.isActive = isActive;
+  if (goal && typeof goal === 'object') {
+    org.goal = {
+      year: Number(goal.year) || org.goal?.year || 0,
+      targetFollowers: Number(goal.targetFollowers) || 0,
+      targetPosts: Number(goal.targetPosts) || 0,
+      note: goal.note ?? org.goal?.note ?? '',
+    };
+  }
 
   if (req.file) {
     if (org.logoPublicId) await deleteFile(org.logoPublicId);

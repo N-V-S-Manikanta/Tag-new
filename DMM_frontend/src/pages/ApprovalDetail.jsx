@@ -139,7 +139,8 @@ export default function ApprovalDetail() {
               </div>
               <Row label="Status" value={<Badge status={r.status}>{r.status}</Badge>} />
               <Row label="Platform" value={r.platform} />
-              <Row label="Images" value={images.length} />
+              {r.aspectRatio && <Row label="Ratio" value={r.aspectRatio} />}
+              <Row label="Media" value={images.length} />
               {r.approvedAt && <Row label="Approved" value={formatDateTime(r.approvedAt)} />}
               {r.postedAt && <Row label="Posted" value={formatDateTime(r.postedAt)} />}
               {r.resubmitCount > 0 && <Row label="Resubmissions" value={r.resubmitCount} />}

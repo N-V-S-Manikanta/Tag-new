@@ -40,6 +40,14 @@ export const competitorApi = {
   list: (platform) => api.get('/competitors', { params: { platform } }).then((r) => r.data),
 };
 
+// ---- Brand Library / Social Handlers / Premium Packs / Goals (read-only for product) ----
+export const libraryApi = {
+  brand: (params) => api.get('/brand', { params }).then((r) => r.data),
+  socialAccounts: (params) => api.get('/social-accounts', { params }).then((r) => r.data),
+  purchases: () => api.get('/purchases').then((r) => r.data),
+  goal: (orgId) => api.get(`/organizations/${orgId}/goal`).then((r) => r.data),
+};
+
 // ---- Dashboard ----
 export const dashboardApi = {
   stats: () => api.get('/dashboard/stats').then((r) => r.data),

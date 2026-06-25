@@ -12,6 +12,14 @@ const organizationSchema = new mongoose.Schema(
     website: { type: String, default: '' },
     // Visual accent for the org (used in product app branding)
     color: { type: String, default: '#6366f1' },
+    // Yearly goal: targets to reach by the end of `year`. Progress is computed
+    // from analytics (followers) and posted approvals (posts).
+    goal: {
+      year: { type: Number, default: 0 },
+      targetFollowers: { type: Number, default: 0 },
+      targetPosts: { type: Number, default: 0 },
+      note: { type: String, default: '' },
+    },
     isActive: { type: Boolean, default: true },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   },

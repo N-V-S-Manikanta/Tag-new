@@ -35,9 +35,9 @@ export default function Login() {
         <div className="absolute -bottom-32 -left-20 h-96 w-96 rounded-full bg-brand-400/20 blur-3xl" />
         <div className="relative flex items-center gap-3">
           <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/15 backdrop-blur">
-            <span className="text-xl font-extrabold">M</span>
+            <span className="text-xl font-extrabold">T</span>
           </div>
-          <span className="text-lg font-bold">DMM Platform</span>
+          <span className="text-lg font-bold">Tag</span>
         </div>
         <div className="relative">
           <Sparkles className="mb-5 h-10 w-10 text-brand-200" />

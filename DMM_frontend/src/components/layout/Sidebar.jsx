@@ -49,7 +49,7 @@ export default function Sidebar({ open, onClose }) {
               </div>
             )}
             <div className="min-w-0">
-              <p className="truncate text-sm font-extrabold leading-tight text-slate-800 dark:text-white">{org?.name || 'DMM Platform'}</p>
+              <p className="truncate text-sm font-extrabold leading-tight text-slate-800 dark:text-white">{org?.name || 'Tag'}</p>
               <p className="text-[11px] text-slate-400">Marketing Suite</p>
             </div>
           </div>

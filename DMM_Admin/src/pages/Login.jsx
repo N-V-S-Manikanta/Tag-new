@@ -33,7 +33,7 @@ export default function Login() {
         <div className="absolute -bottom-32 -left-20 h-96 w-96 rounded-full bg-brand-400/20 blur-3xl" />
         <div className="relative flex items-center gap-3">
           <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/15 backdrop-blur"><ShieldCheck className="h-6 w-6" /></div>
-          <span className="text-lg font-bold">DMM Admin</span>
+          <span className="text-lg font-bold">Tag — Admin</span>
         </div>
         <div className="relative">
           <h1 className="text-4xl font-extrabold leading-tight">Platform administration console.</h1>

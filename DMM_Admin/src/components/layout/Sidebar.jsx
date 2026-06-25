@@ -35,8 +35,8 @@ export default function Sidebar({ open, onClose }) {
               <ShieldCheck className="h-5 w-5 text-white" />
             </div>
             <div>
-              <p className="text-sm font-extrabold leading-tight text-slate-800 dark:text-white">DMM Admin</p>
-              <p className="text-[11px] text-slate-400">Platform Console</p>
+              <p className="text-sm font-extrabold leading-tight text-slate-800 dark:text-white">Tag</p>
+              <p className="text-[11px] text-slate-400">Admin Console</p>
             </div>
           </div>
           <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 lg:hidden"><X className="h-5 w-5" /></button>

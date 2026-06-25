@@ -166,12 +166,12 @@ function AccountModal({ item, orgs, onClose, onSaved }) {
           </div>
           <div className="space-y-2">
             {form.handlers.map((h, i) => (
-              <div key={i} className="grid grid-cols-12 gap-2">
-                <Input className="col-span-3" placeholder="Name" value={h.name} onChange={(e) => setHandler(i, 'name', e.target.value)} />
-                <Input className="col-span-3" placeholder="Email" value={h.email} onChange={(e) => setHandler(i, 'email', e.target.value)} />
-                <Input className="col-span-3" placeholder="Phone" value={h.phone} onChange={(e) => setHandler(i, 'phone', e.target.value)} />
-                <Input className="col-span-2" placeholder="Role" value={h.role} onChange={(e) => setHandler(i, 'role', e.target.value)} />
-                <button type="button" onClick={() => set('handlers', form.handlers.filter((_, idx) => idx !== i))} className="col-span-1 flex items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"><X className="h-4 w-4" /></button>
+              <div key={i} className="grid grid-cols-1 gap-2 sm:grid-cols-12">
+                <Input className="sm:col-span-3" placeholder="Name" value={h.name} onChange={(e) => setHandler(i, 'name', e.target.value)} />
+                <Input className="sm:col-span-3" placeholder="Email" value={h.email} onChange={(e) => setHandler(i, 'email', e.target.value)} />
+                <Input className="sm:col-span-3" placeholder="Phone" value={h.phone} onChange={(e) => setHandler(i, 'phone', e.target.value)} />
+                <Input className="sm:col-span-2" placeholder="Role" value={h.role} onChange={(e) => setHandler(i, 'role', e.target.value)} />
+                <button type="button" onClick={() => set('handlers', form.handlers.filter((_, idx) => idx !== i))} className="flex items-center justify-center rounded-lg py-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 sm:col-span-1"><X className="h-4 w-4" /></button>
               </div>
             ))}
           </div>

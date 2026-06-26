@@ -199,7 +199,7 @@ const ANALYTICS_COLUMNS = [
   { field: 'reactions', pats: [/reactionstotal/, /reactionsorganic/, /reaction|likes/] },
   { field: 'comments', pats: [/commentstotal/, /commentsorganic/, /comment/] },
   { field: 'reposts', pats: [/repoststotal/, /repostsorganic/, /repost|share/] },
-  { field: 'postsPublished', pats: [/postspublished/, /^posts$/, /posts/] },
+  { field: 'postsPublished', pats: [/postspublished/, /^posts$/, /^postscount$/] }, // not /posts/ — that matches "reposts"
   { field: 'desktopPageViews', pats: [/desktoppageview/, /desktop/] },
   { field: 'mobilePageViews', pats: [/mobilepageview/, /mobile/] },
   { field: 'uniqueVisitors', pats: [/uniquevisitor/] },

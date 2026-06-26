@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { Linkedin, Instagram, Youtube, Facebook, Save, BarChart3, PenLine, Trophy, Users, Upload, Download, FileSpreadsheet } from 'lucide-react';
+import { Linkedin, Instagram, Youtube, Facebook, Save, BarChart3, PenLine, Trophy, Users, Upload, Download, FileSpreadsheet, Trash2 } from 'lucide-react';
 import { analyticsApi } from '../api/endpoints.js';
 import { downloadBlob } from '../lib/utils.js';
 import PageHeader from '../components/layout/PageHeader.jsx';
@@ -130,10 +130,30 @@ function MetricEntry({ orgId, platform, report }) {
     onSuccess: () => { toast.success(`${platform} metrics saved`); qc.invalidateQueries({ queryKey: ['report', orgId, platform] }); },
     onError: (e) => toast.error(e.response?.data?.message || 'Save failed'),
   });
+  const clearMut = useMutation({
+    mutationFn: () => analyticsApi.clear(platform, orgId),
+    onSuccess: (res) => {
+      toast.success(`Cleared ${platform} metrics${res.deleted ? ` (${res.deleted} entries)` : ''}`);
+      const blank = {}; Object.values(groups).flat().forEach((f) => { blank[f] = ''; }); setValues(blank);
+      qc.invalidateQueries({ queryKey: ['report', orgId, platform] });
+    },
+    onError: (e) => toast.error(e.response?.data?.message || 'Clear failed'),
+  });
+  const clearMetrics = () => {
+    if (window.confirm(`Clear ALL stored ${platform} metrics for this organization? This deletes every saved/imported entry so you can start fresh. This cannot be undone.`)) clearMut.mutate();
+  };
 
   return (
     <form onSubmit={(e) => { e.preventDefault(); saveMut.mutate(); }} className="space-y-4">
-      <p className="text-sm text-slate-400">Enter this week's {platform} numbers. Each save is stored as a dated snapshot, so week-over-week change is tracked automatically.</p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-slate-400">Enter this week's {platform} numbers. Each save is stored as a dated snapshot, so week-over-week change is tracked automatically.</p>
+        {report?.hasData && (
+          <Button type="button" variant="outline" loading={clearMut.isPending} onClick={clearMetrics}
+            className="border-rose-200 text-rose-600 hover:bg-rose-50 dark:border-rose-500/30 dark:text-rose-400 dark:hover:bg-rose-500/10">
+            <Trash2 className="h-4 w-4" /> Clear {platform} metrics
+          </Button>
+        )}
+      </div>
       {Object.entries(groups).map(([group, fields]) => (
         <Card key={group} className="p-5">
           <h3 className="mb-4 font-bold text-slate-800 dark:text-white">{group}</h3>

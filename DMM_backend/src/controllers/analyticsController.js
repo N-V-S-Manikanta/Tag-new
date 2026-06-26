@@ -235,6 +235,22 @@ export const recordAnalytics = asyncHandler(async (req, res) => {
   res.status(201).json({ success: true, snapshot });
 });
 
+// @route DELETE /api/analytics?platform=LinkedIn  (ADMIN/CEO) — clear stored
+// metrics for an org so fresh numbers can be entered/imported. With a platform,
+// only that platform is cleared; without one, every platform for the org is.
+export const clearAnalytics = asyncHandler(async (req, res) => {
+  const orgId = requireOrgId(req, res);
+  const filter = { organization: orgId };
+  const { platform } = req.query;
+  if (platform) {
+    if (!PLATFORMS.includes(platform)) { res.status(400); throw new Error('Invalid platform'); }
+    filter.platform = platform;
+  }
+  const result = await Analytics.deleteMany(filter);
+  logActivity({ user: req.user._id, organization: orgId, action: ACTIVITY_ACTIONS.ANALYTICS_UPDATED, description: `Cleared ${platform || 'all'} analytics (${result.deletedCount} entries)`, entityType: 'Analytics' });
+  res.json({ success: true, deleted: result.deletedCount });
+});
+
 // ----------------------------------------------------------------------------
 // Excel import — daily analytics export (e.g. LinkedIn's downloaded sheets)
 // ----------------------------------------------------------------------------

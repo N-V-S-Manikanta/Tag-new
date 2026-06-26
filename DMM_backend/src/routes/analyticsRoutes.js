@@ -5,6 +5,7 @@ import {
   getPlatformHistory,
   compareOrganizations,
   recordAnalytics,
+  clearAnalytics,
   importAnalytics,
   analyticsTemplate,
 } from '../controllers/analyticsController.js';
@@ -19,6 +20,7 @@ router.get('/', getAnalytics);
 router.get('/template', analyticsTemplate); // before /:platform
 router.get('/compare', authorize(ROLES.ADMIN), compareOrganizations); // before /:platform
 router.post('/', authorize(ROLES.ADMIN, ROLES.CEO), recordAnalytics);
+router.delete('/', authorize(ROLES.ADMIN, ROLES.CEO), clearAnalytics);
 router.post('/import', authorize(ROLES.ADMIN, ROLES.CEO), upload.single('file'), importAnalytics);
 router.get('/:platform/report', getPlatformReport);
 router.get('/:platform/history', getPlatformHistory);

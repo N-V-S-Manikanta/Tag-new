@@ -32,6 +32,7 @@ export function DeltaBadge({ delta, isPct, size = 'sm' }) {
 // `report` is the payload from /api/analytics/:platform/report
 export default function AnalyticsReport({ report, isLoading }) {
   const [barMetric, setBarMetric] = useState(null);
+  const [view, setView] = useState('weekly');
 
   if (isLoading) {
     return (
@@ -52,21 +53,47 @@ export default function AnalyticsReport({ report, isLoading }) {
   const audienceField = fields.includes('followers') ? 'followers' : fields.includes('subscribers') ? 'subscribers' : highlights[0];
   const activeBar = barMetric || (fields.includes('impressions') ? 'impressions' : highlights[0]);
 
+  // Weekly (merged 7-day totals) vs daily.
+  const weekly = report.weekly;
+  const canWeekly = !!(weekly && weekly.series && weekly.series.length);
+  const useWeekly = view === 'weekly' && canWeekly;
+  const current = useWeekly ? weekly.current : latest;
+  const cmpDeltas = useWeekly ? weekly.deltas : deltas;
+  const wkLabel = (s) => `${fmtDate(s.from)} – ${fmtDate(s.to)}`;
+  const chartData = (useWeekly ? weekly.series : series).map((s) => ({ ...s, x: useWeekly ? wkLabel(s) : fmtDate(s.date) }));
+
   return (
     <div className="space-y-5">
-      {previous && (
-        <p className="text-xs text-slate-400">
-          Week-over-week: comparing {fmtDate(latest.date)} with a week earlier ({fmtDate(previous.date)})
-        </p>
-      )}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        {useWeekly ? (
+          weekly.currentRange && (
+            <p className="text-xs text-slate-400">
+              This week ({fmtDate(weekly.currentRange.from)} – {fmtDate(weekly.currentRange.to)}, {weekly.currentRange.days} days){' '}
+              {weekly.hasPrevious
+                ? <>vs last week ({fmtDate(weekly.previousRange.from)} – {fmtDate(weekly.previousRange.to)})</>
+                : <span>— no previous week to compare yet</span>}
+            </p>
+          )
+        ) : (
+          previous && (
+            <p className="text-xs text-slate-400">Comparing {fmtDate(latest.date)} with a week earlier ({fmtDate(previous.date)})</p>
+          )
+        )}
+        {canWeekly && (
+          <div className="inline-flex rounded-lg bg-slate-100 dark:bg-slate-800 p-1 text-xs font-semibold">
+            <button onClick={() => setView('weekly')} className={cn('rounded-md px-3 py-1', useWeekly ? 'bg-white dark:bg-slate-900 text-brand-700 dark:text-brand-300 shadow-soft' : 'text-slate-500')}>Weekly</button>
+            <button onClick={() => setView('daily')} className={cn('rounded-md px-3 py-1', !useWeekly ? 'bg-white dark:bg-slate-900 text-brand-700 dark:text-brand-300 shadow-soft' : 'text-slate-500')}>Daily</button>
+          </div>
+        )}
+      </div>
 
       {/* Highlight cards */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {highlights.map((f) => (
           <Card key={f} className="p-5">
-            <p className="text-sm font-medium text-slate-400">{labels[f]}</p>
-            <p className="mt-2 text-3xl font-extrabold tracking-tight text-slate-800 dark:text-white">{fmt(latest[f], pct.has(f))}</p>
-            <div className="mt-2"><DeltaBadge delta={deltas[f]} isPct={pct.has(f)} /></div>
+            <p className="text-sm font-medium text-slate-400">{labels[f]}{useWeekly && !pct.has(f) ? ' (week)' : ''}</p>
+            <p className="mt-2 text-3xl font-extrabold tracking-tight text-slate-800 dark:text-white">{fmt(current?.[f], pct.has(f))}</p>
+            <div className="mt-2"><DeltaBadge delta={cmpDeltas[f]} isPct={pct.has(f)} /></div>
           </Card>
         ))}
       </div>
@@ -74,10 +101,10 @@ export default function AnalyticsReport({ report, isLoading }) {
       {/* Charts */}
       <div className="grid gap-4 lg:grid-cols-2">
         <Card className="p-5">
-          <h3 className="mb-1 font-bold text-slate-800 dark:text-white">{labels[audienceField]} growth</h3>
-          <p className="mb-4 text-xs text-slate-400">Across recent entries</p>
+          <h3 className="mb-1 font-bold text-slate-800 dark:text-white">{labels[audienceField]} {useWeekly ? 'by week' : 'growth'}</h3>
+          <p className="mb-4 text-xs text-slate-400">{useWeekly ? 'Each point is one week' : 'Across recent entries'}</p>
           <ResponsiveContainer width="100%" height={240}>
-            <AreaChart data={series} margin={{ left: -12, right: 8, top: 8 }}>
+            <AreaChart data={chartData} margin={{ left: -12, right: 8, top: 8 }}>
               <defs>
                 <linearGradient id="aud" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="#7c3aed" stopOpacity={0.35} />
@@ -85,9 +112,9 @@ export default function AnalyticsReport({ report, isLoading }) {
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
-              <XAxis dataKey="date" tickFormatter={fmtDate} tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} minTickGap={20} />
+              <XAxis dataKey="x" tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} minTickGap={20} />
               <YAxis tick={{ fontSize: 12, fill: '#94a3b8' }} axisLine={false} tickLine={false} tickFormatter={(v) => formatNumber(v)} />
-              <Tooltip contentStyle={{ borderRadius: 12, fontSize: 13 }} labelFormatter={fmtDate} formatter={(v) => formatNumber(v)} />
+              <Tooltip contentStyle={{ borderRadius: 12, fontSize: 13 }} formatter={(v) => formatNumber(v)} />
               <Area type="monotone" dataKey={audienceField} stroke="#7c3aed" strokeWidth={2.5} fill="url(#aud)" name={labels[audienceField]} />
             </AreaChart>
           </ResponsiveContainer>
@@ -95,17 +122,17 @@ export default function AnalyticsReport({ report, isLoading }) {
 
         <Card className="p-5">
           <div className="mb-4 flex items-center justify-between">
-            <h3 className="font-bold text-slate-800 dark:text-white">Weekly {labels[activeBar]}</h3>
+            <h3 className="font-bold text-slate-800 dark:text-white">{useWeekly ? 'Weekly' : 'Daily'} {labels[activeBar]}</h3>
             <select className="input-base h-9 w-auto py-1 text-xs" value={activeBar} onChange={(e) => setBarMetric(e.target.value)}>
               {fields.filter((f) => !pct.has(f)).map((f) => <option key={f} value={f}>{labels[f]}</option>)}
             </select>
           </div>
           <ResponsiveContainer width="100%" height={240}>
-            <BarChart data={series} margin={{ left: -12, right: 8, top: 8 }}>
+            <BarChart data={chartData} margin={{ left: -12, right: 8, top: 8 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
-              <XAxis dataKey="date" tickFormatter={fmtDate} tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} minTickGap={20} />
+              <XAxis dataKey="x" tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} minTickGap={20} />
               <YAxis tick={{ fontSize: 12, fill: '#94a3b8' }} axisLine={false} tickLine={false} tickFormatter={(v) => formatNumber(v)} />
-              <Tooltip contentStyle={{ borderRadius: 12, fontSize: 13 }} labelFormatter={fmtDate} formatter={(v) => formatNumber(v)} cursor={{ fill: 'rgba(124,58,237,0.06)' }} />
+              <Tooltip contentStyle={{ borderRadius: 12, fontSize: 13 }} formatter={(v) => formatNumber(v)} cursor={{ fill: 'rgba(124,58,237,0.06)' }} />
               <Bar dataKey={activeBar} radius={[6, 6, 0, 0]} fill="#7c3aed" name={labels[activeBar]} />
             </BarChart>
           </ResponsiveContainer>
@@ -121,8 +148,8 @@ export default function AnalyticsReport({ report, isLoading }) {
               {groupFields.map((f) => (
                 <div key={f} className="rounded-xl border border-slate-100 dark:border-slate-800 p-3">
                   <p className="text-xs text-slate-400">{labels[f]}</p>
-                  <p className="mt-1 text-xl font-extrabold text-slate-800 dark:text-white">{fmt(latest[f], pct.has(f))}</p>
-                  <div className="mt-1.5"><DeltaBadge delta={deltas[f]} isPct={pct.has(f)} /></div>
+                  <p className="mt-1 text-xl font-extrabold text-slate-800 dark:text-white">{fmt(current?.[f], pct.has(f))}</p>
+                  <div className="mt-1.5"><DeltaBadge delta={cmpDeltas[f]} isPct={pct.has(f)} /></div>
                 </div>
               ))}
             </div>

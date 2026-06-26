@@ -118,6 +118,62 @@ export const getPlatformReport = asyncHandler(async (req, res) => {
     return row;
   });
 
+  // ---- Weekly aggregation ----
+  // Bucket the daily snapshots into rolling 7-day weeks anchored on the latest
+  // date (so "this week" = the most recent 7 days, "last week" = the 7 before).
+  // Counts (impressions, clicks, reactions…) are summed; follower-style totals
+  // take the end-of-week value; rates (engagement %) are impression-weighted.
+  const STOCK_FIELDS = new Set(['followers', 'subscribers', 'profilesManaged', 'followersLast30Days']);
+  const aggregateWeek = (rows) => {
+    const out = {};
+    const totalImp = rows.reduce((a, r) => a + (r.impressions || 0), 0);
+    for (const f of fields) {
+      if (PERCENT_FIELDS.has(f)) {
+        out[f] = totalImp > 0
+          ? +(rows.reduce((a, r) => a + (r[f] || 0) * (r.impressions || 0), 0) / totalImp).toFixed(2)
+          : (rows.length ? +(rows.reduce((a, r) => a + (r[f] || 0), 0) / rows.length).toFixed(2) : 0);
+      } else if (STOCK_FIELDS.has(f)) {
+        out[f] = rows[rows.length - 1]?.[f] || 0; // end-of-week snapshot
+      } else {
+        out[f] = rows.reduce((a, r) => a + (r[f] || 0), 0); // weekly total
+      }
+    }
+    return out;
+  };
+  const rangeOf = (rows) => (rows.length ? { from: rows[0].date, to: rows[rows.length - 1].date, days: rows.length } : null);
+
+  let weekly = null;
+  if (latest) {
+    const asc = [...snapshots].reverse(); // oldest → newest
+    const latestTime = new Date(latest.date).getTime();
+    const WEEK = 7 * 24 * 60 * 60 * 1000;
+    const buckets = new Map(); // weekIndex (0 = most recent 7 days) → rows
+    for (const s of asc) {
+      const idx = Math.floor((latestTime - new Date(s.date).getTime()) / WEEK);
+      if (idx < 0) continue;
+      if (!buckets.has(idx)) buckets.set(idx, []);
+      buckets.get(idx).push(s);
+    }
+    const cur = buckets.get(0) || [];
+    const prev = buckets.get(1) || [];
+    const wDeltas = {};
+    const curAgg = aggregateWeek(cur);
+    const prevAgg = aggregateWeek(prev);
+    for (const f of fields) wDeltas[f] = computeDelta(curAgg[f], prevAgg[f]);
+    const wSeries = [...buckets.entries()]
+      .sort((a, b) => b[0] - a[0]) // oldest week first
+      .map(([, rows]) => ({ ...rangeOf(rows), ...aggregateWeek(rows) }));
+    weekly = {
+      current: curAgg,
+      previous: prevAgg,
+      currentRange: rangeOf(cur),
+      previousRange: rangeOf(prev),
+      hasPrevious: prev.length > 0,
+      deltas: wDeltas,
+      series: wSeries,
+    };
+  }
+
   res.json({
     success: true,
     platform,
@@ -129,6 +185,7 @@ export const getPlatformReport = asyncHandler(async (req, res) => {
     previous,
     deltas,
     series,
+    weekly,
   });
 });
 

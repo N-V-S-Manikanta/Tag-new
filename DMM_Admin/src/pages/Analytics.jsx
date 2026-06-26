@@ -40,12 +40,20 @@ const TabBtn = ({ active, onClick, icon: Icon, children }) => (
   </button>
 );
 
+const RANGES = [
+  { value: 7, label: 'Past 7 days' },
+  { value: 14, label: 'Past 14 days' },
+  { value: 28, label: 'Past 28 days' },
+  { value: 90, label: 'Past 90 days' },
+];
+
 function OrgAnalytics({ orgId }) {
   const qc = useQueryClient();
   const [platform, setPlatform] = useState('LinkedIn');
   const [mode, setMode] = useState('report');
+  const [range, setRange] = useState(7);
   const fileRef = useRef(null);
-  const { data: report, isLoading } = useQuery({ queryKey: ['report', orgId, platform], queryFn: () => analyticsApi.report(platform, orgId) });
+  const { data: report, isLoading } = useQuery({ queryKey: ['report', orgId, platform, range], queryFn: () => analyticsApi.report(platform, orgId, range) });
 
   // Competitor tracking is only offered for LinkedIn — fall back to the report
   // if the admin switches to a platform that doesn't have it.
@@ -84,6 +92,12 @@ function OrgAnalytics({ orgId }) {
           ))}
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {mode === 'report' && (
+            <select value={range} onChange={(e) => setRange(Number(e.target.value))}
+              className="input-base h-9 w-auto py-1 text-sm font-semibold" title="Match this to the range shown on LinkedIn">
+              {RANGES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+            </select>
+          )}
           <Button size="sm" variant="outline" onClick={downloadTemplate}><Download className="h-4 w-4" /> Template</Button>
           <Button size="sm" variant="outline" onClick={() => fileRef.current?.click()} loading={importMut.isPending}><Upload className="h-4 w-4" /> Import Excel</Button>
           <div className="inline-flex rounded-xl bg-slate-100 dark:bg-slate-800 p-1">

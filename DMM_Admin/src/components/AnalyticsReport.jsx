@@ -53,10 +53,12 @@ export default function AnalyticsReport({ report, isLoading }) {
   const audienceField = fields.includes('followers') ? 'followers' : fields.includes('subscribers') ? 'subscribers' : highlights[0];
   const activeBar = barMetric || (fields.includes('impressions') ? 'impressions' : highlights[0]);
 
-  // Weekly (merged 7-day totals) vs daily.
+  // Period (merged range totals, matching LinkedIn) vs daily.
   const weekly = report.weekly;
   const canWeekly = !!(weekly && weekly.series && weekly.series.length);
   const useWeekly = view === 'weekly' && canWeekly;
+  const rangeDays = weekly?.rangeDays || 7;
+  const periodLabel = `Past ${rangeDays} days`;
   const current = useWeekly ? weekly.current : latest;
   const cmpDeltas = useWeekly ? weekly.deltas : deltas;
   const wkLabel = (s) => `${fmtDate(s.from)} – ${fmtDate(s.to)}`;
@@ -68,10 +70,10 @@ export default function AnalyticsReport({ report, isLoading }) {
         {useWeekly ? (
           weekly.currentRange && (
             <p className="text-xs text-slate-400">
-              This week ({fmtDate(weekly.currentRange.from)} – {fmtDate(weekly.currentRange.to)}, {weekly.currentRange.days} days){' '}
+              This period ({fmtDate(weekly.currentRange.from)} – {fmtDate(weekly.currentRange.to)}, {weekly.currentRange.days} days){' '}
               {weekly.hasPrevious
-                ? <>vs last week ({fmtDate(weekly.previousRange.from)} – {fmtDate(weekly.previousRange.to)})</>
-                : <span>— no previous week to compare yet</span>}
+                ? <>vs the previous {rangeDays} days ({fmtDate(weekly.previousRange.from)} – {fmtDate(weekly.previousRange.to)})</>
+                : <span>— no previous period to compare yet</span>}
             </p>
           )
         ) : (
@@ -81,7 +83,7 @@ export default function AnalyticsReport({ report, isLoading }) {
         )}
         {canWeekly && (
           <div className="inline-flex rounded-lg bg-slate-100 dark:bg-slate-800 p-1 text-xs font-semibold">
-            <button onClick={() => setView('weekly')} className={cn('rounded-md px-3 py-1', useWeekly ? 'bg-white dark:bg-slate-900 text-brand-700 dark:text-brand-300 shadow-soft' : 'text-slate-500')}>Weekly</button>
+            <button onClick={() => setView('weekly')} className={cn('rounded-md px-3 py-1', useWeekly ? 'bg-white dark:bg-slate-900 text-brand-700 dark:text-brand-300 shadow-soft' : 'text-slate-500')}>{periodLabel}</button>
             <button onClick={() => setView('daily')} className={cn('rounded-md px-3 py-1', !useWeekly ? 'bg-white dark:bg-slate-900 text-brand-700 dark:text-brand-300 shadow-soft' : 'text-slate-500')}>Daily</button>
           </div>
         )}
@@ -91,7 +93,7 @@ export default function AnalyticsReport({ report, isLoading }) {
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {highlights.map((f) => (
           <Card key={f} className="p-5">
-            <p className="text-sm font-medium text-slate-400">{labels[f]}{useWeekly && !pct.has(f) ? ' (week)' : ''}</p>
+            <p className="text-sm font-medium text-slate-400">{labels[f]}{useWeekly && !pct.has(f) ? ` (${rangeDays}d)` : ''}</p>
             <p className="mt-2 text-3xl font-extrabold tracking-tight text-slate-800 dark:text-white">{fmt(current?.[f], pct.has(f))}</p>
             <div className="mt-2"><DeltaBadge delta={cmpDeltas[f]} isPct={pct.has(f)} /></div>
           </Card>
@@ -101,8 +103,8 @@ export default function AnalyticsReport({ report, isLoading }) {
       {/* Charts */}
       <div className="grid gap-4 lg:grid-cols-2">
         <Card className="p-5">
-          <h3 className="mb-1 font-bold text-slate-800 dark:text-white">{labels[audienceField]} {useWeekly ? 'by week' : 'growth'}</h3>
-          <p className="mb-4 text-xs text-slate-400">{useWeekly ? 'Each point is one week' : 'Across recent entries'}</p>
+          <h3 className="mb-1 font-bold text-slate-800 dark:text-white">{labels[audienceField]} {useWeekly ? 'by period' : 'growth'}</h3>
+          <p className="mb-4 text-xs text-slate-400">{useWeekly ? `Each point is one ${rangeDays}-day period` : 'Across recent entries'}</p>
           <ResponsiveContainer width="100%" height={240}>
             <AreaChart data={chartData} margin={{ left: -12, right: 8, top: 8 }}>
               <defs>
@@ -122,7 +124,7 @@ export default function AnalyticsReport({ report, isLoading }) {
 
         <Card className="p-5">
           <div className="mb-4 flex items-center justify-between">
-            <h3 className="font-bold text-slate-800 dark:text-white">{useWeekly ? 'Weekly' : 'Daily'} {labels[activeBar]}</h3>
+            <h3 className="font-bold text-slate-800 dark:text-white">{useWeekly ? 'Per period' : 'Daily'} {labels[activeBar]}</h3>
             <select className="input-base h-9 w-auto py-1 text-xs" value={activeBar} onChange={(e) => setBarMetric(e.target.value)}>
               {fields.filter((f) => !pct.has(f)).map((f) => <option key={f} value={f}>{labels[f]}</option>)}
             </select>

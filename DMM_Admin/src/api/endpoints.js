@@ -33,7 +33,7 @@ export const userApi = {
 // Org-scoped calls — the active org is attached as x-organization-id by the client.
 export const analyticsApi = {
   get: (organizationId) => api.get('/analytics', { params: { organizationId } }).then((r) => r.data),
-  report: (platform, organizationId) => api.get(`/analytics/${platform}/report`, { params: { organizationId } }).then((r) => r.data),
+  report: (platform, organizationId, range) => api.get(`/analytics/${platform}/report`, { params: { organizationId, range } }).then((r) => r.data),
   compare: (platform, metric) => api.get('/analytics/compare', { params: { platform, metric } }).then((r) => r.data),
   record: (data) => api.post('/analytics', data).then((r) => r.data),
   clear: (platform, organizationId) => api.delete('/analytics', { params: { platform, organizationId } }).then((r) => r.data),

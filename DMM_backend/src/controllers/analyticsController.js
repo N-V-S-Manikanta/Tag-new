@@ -93,6 +93,12 @@ export const getPlatformReport = asyncHandler(async (req, res) => {
   const { platform } = req.params;
   if (!PLATFORMS.includes(platform)) { res.status(400); throw new Error('Invalid platform'); }
 
+  // Window length for the period comparison, matching LinkedIn's range presets
+  // (Past 7 / 14 / 28 / 90 days). Defaults to 7. "This period" = the most recent
+  // N days; "last period" = the N days before that.
+  const ALLOWED_RANGES = [7, 14, 28, 90];
+  const rangeDays = ALLOWED_RANGES.includes(Number(req.query.range)) ? Number(req.query.range) : 7;
+
   // Up to ~4 months of daily snapshots (or years of weekly) so imported daily
   // exports render in full, not just the last couple of weeks.
   const snapshots = await Analytics.find({ organization: orgId, platform }).sort({ date: -1 }).limit(120).lean();
@@ -122,21 +128,45 @@ export const getPlatformReport = asyncHandler(async (req, res) => {
   // Bucket the daily snapshots into rolling 7-day weeks anchored on the latest
   // date (so "this week" = the most recent 7 days, "last week" = the 7 before).
   // Counts (impressions, clicks, reactions…) are summed; follower-style totals
-  // take the end-of-week value; rates (engagement %) are impression-weighted.
+  // take the end-of-week value.
   const STOCK_FIELDS = new Set(['followers', 'subscribers', 'profilesManaged', 'followersLast30Days']);
+  // Engagement rate is DERIVED from the period totals exactly like LinkedIn does
+  // — engagements ÷ impressions over the whole period — not an average of each
+  // day's percentage (which is mathematically wrong and drifts a few tenths).
+  // We only use the components a platform actually tracks.
+  const ENGAGEMENT_COMPONENTS = ['clicks', 'reactions', 'comments', 'reposts', 'shares'].filter((f) => fields.includes(f));
   const aggregateWeek = (rows) => {
     const out = {};
-    const totalImp = rows.reduce((a, r) => a + (r.impressions || 0), 0);
     for (const f of fields) {
       if (PERCENT_FIELDS.has(f)) {
-        out[f] = totalImp > 0
-          ? +(rows.reduce((a, r) => a + (r[f] || 0) * (r.impressions || 0), 0) / totalImp).toFixed(2)
-          : (rows.length ? +(rows.reduce((a, r) => a + (r[f] || 0), 0) / rows.length).toFixed(2) : 0);
+        out[f] = 0; // filled in below from totals
       } else if (STOCK_FIELDS.has(f)) {
         out[f] = rows[rows.length - 1]?.[f] || 0; // end-of-week snapshot
       } else {
-        out[f] = rows.reduce((a, r) => a + (r[f] || 0), 0); // weekly total
+        out[f] = rows.reduce((a, r) => a + (r[f] || 0), 0); // period total
       }
+    }
+    // Engagement rate = total engagements ÷ total impressions (LinkedIn's method).
+    // Fall back to the impression-weighted average of stored daily rates only when
+    // the underlying counts weren't provided, so a rate-only import still shows.
+    if (out.engagementRate !== undefined) {
+      const engagements = ENGAGEMENT_COMPONENTS.reduce((a, f) => a + (out[f] || 0), 0);
+      if (out.impressions > 0 && engagements > 0) {
+        out.engagementRate = +((engagements / out.impressions) * 100).toFixed(2);
+      } else {
+        const totalImp = rows.reduce((a, r) => a + (r.impressions || 0), 0);
+        out.engagementRate = totalImp > 0
+          ? +(rows.reduce((a, r) => a + (r.engagementRate || 0) * (r.impressions || 0), 0) / totalImp).toFixed(2)
+          : (rows.length ? +(rows.reduce((a, r) => a + (r.engagementRate || 0), 0) / rows.length).toFixed(2) : 0);
+      }
+    }
+    // Any other percentage fields keep the impression-weighted average.
+    for (const f of fields) {
+      if (!PERCENT_FIELDS.has(f) || f === 'engagementRate') continue;
+      const totalImp = rows.reduce((a, r) => a + (r.impressions || 0), 0);
+      out[f] = totalImp > 0
+        ? +(rows.reduce((a, r) => a + (r[f] || 0) * (r.impressions || 0), 0) / totalImp).toFixed(2)
+        : (rows.length ? +(rows.reduce((a, r) => a + (r[f] || 0), 0) / rows.length).toFixed(2) : 0);
     }
     return out;
   };
@@ -146,10 +176,10 @@ export const getPlatformReport = asyncHandler(async (req, res) => {
   if (latest) {
     const asc = [...snapshots].reverse(); // oldest → newest
     const latestTime = new Date(latest.date).getTime();
-    const WEEK = 7 * 24 * 60 * 60 * 1000;
-    const buckets = new Map(); // weekIndex (0 = most recent 7 days) → rows
+    const windowMs = rangeDays * 24 * 60 * 60 * 1000;
+    const buckets = new Map(); // periodIndex (0 = most recent N days) → rows
     for (const s of asc) {
-      const idx = Math.floor((latestTime - new Date(s.date).getTime()) / WEEK);
+      const idx = Math.floor((latestTime - new Date(s.date).getTime()) / windowMs);
       if (idx < 0) continue;
       if (!buckets.has(idx)) buckets.set(idx, []);
       buckets.get(idx).push(s);
@@ -161,9 +191,10 @@ export const getPlatformReport = asyncHandler(async (req, res) => {
     const prevAgg = aggregateWeek(prev);
     for (const f of fields) wDeltas[f] = computeDelta(curAgg[f], prevAgg[f]);
     const wSeries = [...buckets.entries()]
-      .sort((a, b) => b[0] - a[0]) // oldest week first
+      .sort((a, b) => b[0] - a[0]) // oldest period first
       .map(([, rows]) => ({ ...rangeOf(rows), ...aggregateWeek(rows) }));
     weekly = {
+      rangeDays,
       current: curAgg,
       previous: prevAgg,
       currentRange: rangeOf(cur),
@@ -181,6 +212,8 @@ export const getPlatformReport = asyncHandler(async (req, res) => {
     groups: PLATFORM_FIELDS[platform],
     labels: FIELD_LABELS,
     percentFields: [...PERCENT_FIELDS],
+    ranges: ALLOWED_RANGES,
+    rangeDays,
     latest,
     previous,
     deltas,

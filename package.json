@@ -1,0 +1,14 @@
+{
+  "name": "tag-platform",
+  "version": "1.0.0",
+  "private": true,
+  "description": "t@g — run the backend, product app and admin app together",
+  "scripts": {
+    "start-all": "concurrently -k -n backend,product,admin -c blue,green,magenta \"npm --prefix DMM_backend run dev\" \"npm --prefix DMM_frontend run dev\" \"npm --prefix DMM_Admin run dev\"",
+    "dev": "npm run start-all",
+    "install-all": "npm install && npm --prefix DMM_backend install && npm --prefix DMM_frontend install && npm --prefix DMM_Admin install"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}

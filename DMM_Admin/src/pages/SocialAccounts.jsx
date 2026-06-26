@@ -1,14 +1,15 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { Share2, Plus, Pencil, Trash2, Mail, Phone, Star, Users, ExternalLink, X } from 'lucide-react';
+import { Share2, Plus, Pencil, Trash2, Mail, Phone, Star, Users, ExternalLink, X, Upload, Download, FileSpreadsheet } from 'lucide-react';
 import { socialAccountApi, organizationApi } from '../api/endpoints.js';
+import { downloadBlob } from '../lib/utils.js';
 import PageHeader from '../components/layout/PageHeader.jsx';
 import { Button } from '../components/ui/Button.jsx';
 import { Card, Input, Select, Skeleton, EmptyState } from '../components/ui/primitives.jsx';
 import { Modal } from '../components/ui/Modal.jsx';
 
-const PLATFORMS = ['LinkedIn', 'Instagram', 'YouTube', 'Facebook'];
+const PLATFORMS = ['LinkedIn', 'Instagram', 'YouTube', 'Facebook', 'X (Twitter)'];
 const blankHandler = { name: '', email: '', phone: '', role: '' };
 const blank = { platform: 'LinkedIn', organization: '', accountName: '', profileUrl: '', ownerName: '', ownerEmail: '', linkedEmails: '', rating: 0, accessCount: 0, notes: '', handlers: [{ ...blankHandler }] };
 
@@ -16,6 +17,7 @@ export default function SocialAccounts() {
   const qc = useQueryClient();
   const [filters, setFilters] = useState({ organizationId: 'all', platform: 'All', search: '' });
   const [modal, setModal] = useState(null);
+  const fileRef = useRef(null);
 
   const { data: orgData } = useQuery({ queryKey: ['organizations', 'picker'], queryFn: () => organizationApi.list() });
   const orgs = orgData?.organizations || [];
@@ -31,10 +33,45 @@ export default function SocialAccounts() {
     onError: (e) => toast.error(e.response?.data?.message || 'Failed'),
   });
 
+  const importMut = useMutation({
+    mutationFn: (file) => { const fd = new FormData(); fd.append('file', file); return socialAccountApi.import(fd); },
+    onSuccess: (res) => {
+      const orgNote = res.organizationsCreated ? `, ${res.organizationsCreated} new organizations` : '';
+      toast.success(`Imported ${res.imported} accounts — ${res.created} new, ${res.updated} updated${orgNote}`);
+      qc.invalidateQueries({ queryKey: ['social-accounts'] });
+      qc.invalidateQueries({ queryKey: ['organizations'] });
+    },
+    onError: (e) => toast.error(e.response?.data?.message || 'Import failed'),
+  });
+
+  const onPickFile = (e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) importMut.mutate(f); };
+  const downloadTemplate = async () => {
+    try { downloadBlob(await socialAccountApi.template(), 'social-accounts-template.xlsx'); }
+    catch { toast.error('Could not download template'); }
+  };
+
   return (
     <div>
+      <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={onPickFile} />
       <PageHeader title="Social Media Handlers" subtitle="Who handles each platform per organization — owners, linked emails, coordinators and their contact details."
-        actions={<Button onClick={() => setModal({ type: 'create' })}><Plus className="h-4 w-4" /> Add account</Button>} />
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="outline" onClick={downloadTemplate}><Download className="h-4 w-4" /> Template</Button>
+            <Button variant="outline" onClick={() => fileRef.current?.click()} loading={importMut.isPending}><Upload className="h-4 w-4" /> Import Excel</Button>
+            <Button onClick={() => setModal({ type: 'create' })}><Plus className="h-4 w-4" /> Add account</Button>
+          </div>
+        } />
+
+      <div className="mb-5 flex items-start gap-2.5 rounded-xl border border-slate-200/70 bg-slate-50 px-4 py-3 text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-800/40 dark:text-slate-400">
+        <FileSpreadsheet className="mt-0.5 h-4 w-4 shrink-0 text-brand-500" />
+        <span>
+          <span className="font-semibold text-slate-600 dark:text-slate-300">Excel import:</span> upload your sheet with
+          columns like <em>College</em>, <em>Platform</em>, <em>Admin Name</em>, <em>Admin Type</em> and <em>Note</em>.
+          The link behind each platform becomes the profile URL, admins become handlers, and a row with a blank platform
+          adds more admins to the row above. Each college is matched to an organization (created if new). Re-importing updates
+          existing accounts instead of duplicating.
+        </span>
+      </div>
 
       <div className="mb-5 grid gap-3 sm:grid-cols-3">
         <Select value={filters.organizationId} onChange={(e) => setFilters({ ...filters, organizationId: e.target.value })}>

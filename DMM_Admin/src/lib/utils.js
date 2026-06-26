@@ -18,6 +18,18 @@ export const formatNumber = (n) => {
 export const initials = (name = '') =>
   name.split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase();
 
+// Trigger a browser download for a Blob (e.g. an Excel file returned by the API).
+export const downloadBlob = (blob, filename) => {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+};
+
 // Is this approval media item a video? Checks stored mediaType or URL extension.
 export const isVideo = (m) =>
   m?.mediaType === 'video' || /\.(mp4|webm|mov|m4v|ogg|mkv)$/i.test(m?.url || '');

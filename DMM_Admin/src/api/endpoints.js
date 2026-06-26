@@ -82,6 +82,18 @@ export const socialAccountApi = {
   create: (data) => api.post('/social-accounts', data).then((r) => r.data),
   update: (id, data) => api.put(`/social-accounts/${id}`, data).then((r) => r.data),
   remove: (id) => api.delete(`/social-accounts/${id}`).then((r) => r.data),
+  import: (formData) => api.post('/social-accounts/import', formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data),
+  template: () => api.get('/social-accounts/template', { responseType: 'blob' }).then((r) => r.data),
+};
+
+// Websites / domains inventory directory.
+export const websiteApi = {
+  list: (params) => api.get('/websites', { params }).then((r) => r.data),
+  create: (data) => api.post('/websites', data).then((r) => r.data),
+  update: (id, data) => api.put(`/websites/${id}`, data).then((r) => r.data),
+  remove: (id) => api.delete(`/websites/${id}`).then((r) => r.data),
+  import: (formData) => api.post('/websites/import', formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data),
+  template: () => api.get('/websites/template', { responseType: 'blob' }).then((r) => r.data),
 };
 
 export const calendarApi = {

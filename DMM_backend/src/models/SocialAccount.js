@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { SOCIAL_PLATFORMS } from '../config/constants.js';
 
 // Who handles each social media account, per organization + platform — owner,
 // linked emails, the coordinators handling it (with contact details), the
@@ -16,7 +17,7 @@ const handlerSchema = new mongoose.Schema(
 const socialAccountSchema = new mongoose.Schema(
   {
     organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true, index: true },
-    platform: { type: String, enum: ['LinkedIn', 'Instagram', 'YouTube', 'Facebook'], required: true },
+    platform: { type: String, enum: SOCIAL_PLATFORMS, required: true },
     accountName: { type: String, default: '' }, // handle / page name
     profileUrl: { type: String, default: '' }, // website / profile link
     ownerName: { type: String, default: '' },

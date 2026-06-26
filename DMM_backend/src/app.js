@@ -20,6 +20,7 @@ import competitorRoutes from './routes/competitorRoutes.js';
 import purchaseRoutes from './routes/purchaseRoutes.js';
 import brandAssetRoutes from './routes/brandAssetRoutes.js';
 import socialAccountRoutes from './routes/socialAccountRoutes.js';
+import websiteRoutes from './routes/websiteRoutes.js';
 import organizationRoutes from './routes/organizationRoutes.js';
 import calendarRoutes from './routes/calendarRoutes.js';
 
@@ -69,6 +70,7 @@ app.use('/api/competitors', competitorRoutes);
 app.use('/api/purchases', purchaseRoutes);
 app.use('/api/brand', brandAssetRoutes);
 app.use('/api/social-accounts', socialAccountRoutes);
+app.use('/api/websites', websiteRoutes);
 app.use('/api/organizations', organizationRoutes);
 app.use('/api/calendar', calendarRoutes);
 

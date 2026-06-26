@@ -8,6 +8,10 @@ export const ROLES = {
 
 export const PLATFORMS = ['LinkedIn', 'Instagram', 'YouTube', 'Facebook'];
 
+// The social-handlers directory also tracks X (Twitter) accounts, which the
+// analytics/competitor features (core 4 platforms) don't.
+export const SOCIAL_PLATFORMS = [...PLATFORMS, 'X (Twitter)'];
+
 // What a rejection feedback point asks the submitter to change. "Reject" means
 // the content is not salvageable rather than a specific fix.
 export const FEEDBACK_CATEGORIES = ['Image', 'Content', 'Other', 'Reject'];
@@ -62,4 +66,6 @@ export const ACTIVITY_ACTIONS = {
   USER_DEACTIVATED: 'USER_DEACTIVATED',
   ANALYTICS_UPDATED: 'ANALYTICS_UPDATED',
   COMPETITOR_UPDATED: 'COMPETITOR_UPDATED',
+  SOCIAL_ACCOUNT_UPDATED: 'SOCIAL_ACCOUNT_UPDATED',
+  WEBSITE_UPDATED: 'WEBSITE_UPDATED',
 };

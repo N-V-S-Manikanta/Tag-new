@@ -13,12 +13,17 @@ const ALLOWED = {
     'application/vnd.openxmlformats-officedocument.presentationml.presentation',
     'application/postscript', // .ai
     'image/vnd.adobe.photoshop', // .psd
-    'application/octet-stream', // some .psd/.ai come through as this
+    'application/octet-stream', // some .psd/.ai/.xlsx come through as this
+  ],
+  sheet: [
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
+    'application/vnd.ms-excel', // .xls
+    'text/csv', // .csv
   ],
 };
 
 const fileFilter = (req, file, cb) => {
-  const all = [...ALLOWED.image, ...ALLOWED.video, ...ALLOWED.doc];
+  const all = [...ALLOWED.image, ...ALLOWED.video, ...ALLOWED.doc, ...ALLOWED.sheet];
   if (all.includes(file.mimetype)) return cb(null, true);
   cb(new Error(`Unsupported file type: ${file.mimetype}`));
 };

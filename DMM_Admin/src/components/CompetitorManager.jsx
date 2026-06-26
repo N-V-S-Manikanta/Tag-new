@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell } from 'recharts';
-import { Users, Plus, Pencil, Trash2, X, Save } from 'lucide-react';
+import { Users, Plus, Pencil, Trash2, X, Save, Upload, Download, FileSpreadsheet } from 'lucide-react';
 import { competitorApi } from '../api/endpoints.js';
 import { Button } from './ui/Button.jsx';
 import { Card, Input, Skeleton, EmptyState } from './ui/primitives.jsx';
@@ -18,6 +18,7 @@ export default function CompetitorManager({ orgId, platform }) {
 
   const [editing, setEditing] = useState(null); // null | 'new' | competitor._id
   const [form, setForm] = useState(blankForm);
+  const fileRef = useRef(null);
 
   const labels = data?.labels || {};
   const fields = data?.fields || [];
@@ -42,6 +43,42 @@ export default function CompetitorManager({ orgId, platform }) {
     onSuccess: () => { toast.success('Competitor removed'); invalidate(); },
     onError: (e) => toast.error(e.response?.data?.message || 'Delete failed'),
   });
+  const importMut = useMutation({
+    mutationFn: (file) => {
+      const fd = new FormData();
+      fd.append('platform', platform);
+      if (orgId) fd.append('organization', orgId);
+      fd.append('file', file);
+      return competitorApi.import(fd);
+    },
+    onSuccess: (res) => {
+      toast.success(`Imported ${res.imported} competitors — ${res.created} new, ${res.updated} updated`);
+      invalidate();
+    },
+    onError: (e) => toast.error(e.response?.data?.message || 'Import failed'),
+  });
+
+  const onPickFile = (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // allow re-uploading the same file
+    if (file) importMut.mutate(file);
+  };
+
+  const downloadTemplate = async () => {
+    try {
+      const blob = await competitorApi.template();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'competitor-template.xlsx';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast.error('Could not download template');
+    }
+  };
 
   const startAdd = () => { setForm(blankForm); setEditing('new'); };
   const startEdit = (c) => {
@@ -60,8 +97,30 @@ export default function CompetitorManager({ orgId, platform }) {
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-slate-400">Track {platform} competitors and benchmark them against your own organization. Numbers are entered manually.</p>
-        {editing === null && <Button size="sm" onClick={startAdd}><Plus className="h-4 w-4" /> Add competitor</Button>}
+        <p className="text-sm text-slate-400">Track {platform} competitors and benchmark them against your own organization. Add them manually or import an Excel sheet.</p>
+        {editing === null && (
+          <div className="flex flex-wrap items-center gap-2">
+            <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={onPickFile} />
+            <Button size="sm" variant="outline" onClick={downloadTemplate} title="Download a blank Excel template">
+              <Download className="h-4 w-4" /> Template
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => fileRef.current?.click()} loading={importMut.isPending} title="Import competitors from an Excel/CSV file">
+              <Upload className="h-4 w-4" /> Import Excel
+            </Button>
+            <Button size="sm" onClick={startAdd}><Plus className="h-4 w-4" /> Add competitor</Button>
+          </div>
+        )}
+      </div>
+
+      {/* Import hint */}
+      <div className="flex items-start gap-2.5 rounded-xl border border-slate-200/70 bg-slate-50 px-4 py-3 text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-800/40 dark:text-slate-400">
+        <FileSpreadsheet className="mt-0.5 h-4 w-4 shrink-0 text-brand-500" />
+        <span>
+          <span className="font-semibold text-slate-600 dark:text-slate-300">Excel import:</span> your sheet just needs a header row.
+          Columns like <em>Name / College</em>, <em>Followers</em>, <em>New Followers</em>, <em>Posts</em> and <em>Engagement Rate</em> are detected
+          automatically and the comparison chart is recalculated. Matching names update existing competitors instead of duplicating them.
+          Not sure of the format? Download the template.
+        </span>
       </div>
 
       {/* Add / edit form */}

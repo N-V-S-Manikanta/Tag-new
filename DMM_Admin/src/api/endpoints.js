@@ -45,6 +45,8 @@ export const competitorApi = {
   create: (data) => api.post('/competitors', data).then((r) => r.data),
   update: (id, data) => api.put(`/competitors/${id}`, data).then((r) => r.data),
   remove: (id) => api.delete(`/competitors/${id}`).then((r) => r.data),
+  import: (formData) => api.post('/competitors/import', formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data),
+  template: () => api.get('/competitors/template', { responseType: 'blob' }).then((r) => r.data),
 };
 
 // Approvals — ADMIN is the global head of all organizations and can review,

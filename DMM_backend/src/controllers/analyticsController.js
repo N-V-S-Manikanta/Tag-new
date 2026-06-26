@@ -11,9 +11,9 @@ import { ACTIVITY_ACTIONS, PLATFORMS } from '../config/constants.js';
 export const PLATFORM_FIELDS = {
   LinkedIn: {
     Followers: ['followers', 'newFollowers', 'followersLast30Days', 'organicFollowers', 'sponsoredFollowers'],
-    Content: ['postsPublished', 'impressions', 'uniqueImpressions', 'clicks', 'clickThroughRate', 'reactions', 'comments', 'reposts', 'engagementRate'],
+    Content: ['postsPublished', 'impressions', 'clicks', 'reactions', 'comments', 'reposts', 'engagementRate'],
     Visitors: ['pageViews', 'uniqueVisitors', 'desktopPageViews', 'mobilePageViews', 'customButtonClicks'],
-    'Discovery & Leads': ['searchAppearances', 'leads', 'leadFormViews', 'leadConversionRate'],
+    Discovery: ['searchAppearances'],
   },
   Instagram: {
     Audience: ['followers', 'newFollowers', 'followersLast30Days'],

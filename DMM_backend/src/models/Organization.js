@@ -20,6 +20,15 @@ const organizationSchema = new mongoose.Schema(
       targetPosts: { type: Number, default: 0 },
       note: { type: String, default: '' },
     },
+    // Meta (Facebook/Instagram) account mapping — links this org to its Meta
+    // assets so analytics can be pulled automatically via the Graph API. The
+    // master token itself is NEVER stored here; it lives only in the backend
+    // environment (META_SYSTEM_TOKEN).
+    metaPageId: { type: String, default: '' },
+    metaPageName: { type: String, default: '' },
+    metaInstagramId: { type: String, default: '' },
+    metaInstagramUsername: { type: String, default: '' },
+
     isActive: { type: Boolean, default: true },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   },

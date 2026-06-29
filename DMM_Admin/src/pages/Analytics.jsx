@@ -9,6 +9,7 @@ import OrgPicker from '../components/OrgPicker.jsx';
 import AnalyticsReport from '../components/AnalyticsReport.jsx';
 import CompetitorManager from '../components/CompetitorManager.jsx';
 import OrgCompare from '../components/OrgCompare.jsx';
+import MetaSync from '../components/MetaSync.jsx';
 import { Button } from '../components/ui/Button.jsx';
 import { Card, Input } from '../components/ui/primitives.jsx';
 import { cn } from '../lib/utils.js';
@@ -116,6 +117,10 @@ function OrgAnalytics({ orgId }) {
           detected automatically, each day is stored as a snapshot, and re-uploading the same dates updates them — your past data is never removed.
         </span>
       </div>
+
+      {mode === 'report' && (platform === 'Instagram' || platform === 'Facebook') && (
+        <MetaSync orgId={orgId} platform={platform} onSynced={() => qc.invalidateQueries({ queryKey: ['report', orgId, platform] })} />
+      )}
 
       {mode === 'report' && <AnalyticsReport report={report} isLoading={isLoading} />}
       {mode === 'enter' && <MetricEntry orgId={orgId} platform={platform} report={report} />}

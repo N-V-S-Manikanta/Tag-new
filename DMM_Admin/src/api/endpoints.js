@@ -41,6 +41,16 @@ export const analyticsApi = {
   template: () => api.get('/analytics/template', { responseType: 'blob' }).then((r) => r.data),
 };
 
+// Meta (Facebook + Instagram) live sync. The master token lives only on the
+// backend (env) — these endpoints never see or carry it.
+export const metaApi = {
+  status: () => api.get('/meta/status').then((r) => r.data),
+  accounts: () => api.get('/meta/accounts').then((r) => r.data),
+  map: (organization, pageId) => api.post('/meta/map', { organizationId: organization, pageId }).then((r) => r.data),
+  automap: () => api.post('/meta/automap').then((r) => r.data),
+  sync: (organizationId, platform) => api.post('/meta/sync', { platform }, { params: { organizationId, platform } }).then((r) => r.data),
+};
+
 // Competitor benchmark — org-scoped (active org attached as x-organization-id).
 export const competitorApi = {
   list: (platform, organizationId) => api.get('/competitors', { params: { platform, organizationId } }).then((r) => r.data),

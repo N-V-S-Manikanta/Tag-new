@@ -9,22 +9,38 @@
 // a failing metric is skipped rather than failing the whole sync, and only the
 // fields that actually come back are returned.
 
+import crypto from 'crypto';
+
 const GRAPH = 'https://graph.facebook.com';
 const VERSION = process.env.META_API_VERSION || 'v21.0';
 
 export const hasToken = () => !!process.env.META_SYSTEM_TOKEN;
 const token = () => process.env.META_SYSTEM_TOKEN;
 
+// appsecret_proof = HMAC-SHA256(access_token) keyed with the app secret. Required
+// when the Meta app has "Require app secret proof for server API calls" enabled.
+// Computed for whichever token a given call uses (user token or page token).
+const appSecretProof = (tok) => {
+  const secret = process.env.META_APP_SECRET;
+  if (!secret) return null;
+  return crypto.createHmac('sha256', secret).update(tok).digest('hex');
+};
+
 // Low-level Graph GET. Throws an Error enriched with Meta's error fields.
-const call = async (path, params = {}) => {
+// `tok` overrides the token (e.g. a Page Access Token for page/IG insights);
+// defaults to the system/user token from the environment.
+const call = async (path, params = {}, tok) => {
   if (!hasToken()) {
     const e = new Error('Meta is not connected. Set META_SYSTEM_TOKEN in the backend .env file.');
     e.notConfigured = true;
     throw e;
   }
+  const useTok = tok || token();
   const url = new URL(`${GRAPH}/${VERSION}/${path}`);
   for (const [k, v] of Object.entries(params)) if (v != null) url.searchParams.set(k, v);
-  url.searchParams.set('access_token', token());
+  url.searchParams.set('access_token', useTok);
+  const proof = appSecretProof(useTok);
+  if (proof) url.searchParams.set('appsecret_proof', proof);
 
   let res, data;
   try {
@@ -50,7 +66,10 @@ const call = async (path, params = {}) => {
 // Follow Graph pagination via the absolute `paging.next` URL (which already
 // carries the token + cursor).
 const fetchNext = async (nextUrl) => {
-  const res = await fetch(nextUrl);
+  const u = new URL(nextUrl);
+  const proof = appSecretProof(token());
+  if (proof && !u.searchParams.has('appsecret_proof')) u.searchParams.set('appsecret_proof', proof);
+  const res = await fetch(u);
   const data = await res.json().catch(() => ({}));
   if (data.error) throw Object.assign(new Error(data.error.message), { metaCode: data.error.code });
   return data;
@@ -71,7 +90,7 @@ const latestTs = (metricObj) => {
 export const listAccounts = async () => {
   const out = [];
   let data = await call('me/accounts', {
-    fields: 'name,id,instagram_business_account{id,username,profile_picture_url,followers_count}',
+    fields: 'name,id,access_token,instagram_business_account{id,username,profile_picture_url,followers_count}',
     limit: 100,
   });
   for (;;) {
@@ -79,6 +98,9 @@ export const listAccounts = async () => {
       out.push({
         pageId: pg.id,
         pageName: pg.name,
+        // Page Access Token — REQUIRED for page/Instagram insights. Kept server-side
+        // only; controllers strip this before returning accounts to the client.
+        pageToken: pg.access_token || null,
         instagramId: pg.instagram_business_account?.id || null,
         instagramUsername: pg.instagram_business_account?.username || null,
         instagramFollowers: pg.instagram_business_account?.followers_count ?? null,
@@ -89,6 +111,16 @@ export const listAccounts = async () => {
     data = await fetchNext(data.paging.next);
   }
   return out;
+};
+
+// Fetch a single Page Access Token by page id (used at sync time).
+export const getPageToken = async (pageId) => {
+  try {
+    const r = await call(pageId, { fields: 'access_token' });
+    return r.access_token || null;
+  } catch {
+    return null;
+  }
 };
 
 // Lightweight identity/health probe for a "Test connection" button.
@@ -116,18 +148,18 @@ export const REQUIRED_SCOPES = [
 // ---------------------------------------------------------------------------
 // Instagram metrics -> our Analytics fields: followers, views, reach, interactions
 // ---------------------------------------------------------------------------
-export const getInstagramMetrics = async (igId) => {
+export const getInstagramMetrics = async (igId, pageToken) => {
   const out = {};
 
   // Total followers — a node field, not an insight.
   try {
-    const node = await call(igId, { fields: 'followers_count' });
+    const node = await call(igId, { fields: 'followers_count' }, pageToken);
     if (typeof node.followers_count === 'number') out.followers = node.followers_count;
   } catch { /* skip */ }
 
-  // Reach — classic time-series insight.
+  // Reach — classic time-series insight (needs the page token + insights scope).
   try {
-    const r = await call(`${igId}/insights`, { metric: 'reach', period: 'day' });
+    const r = await call(`${igId}/insights`, { metric: 'reach', period: 'day' }, pageToken);
     const v = latestTs((r.data || [])[0]);
     if (v != null) out.reach = v;
   } catch { /* skip */ }
@@ -136,12 +168,12 @@ export const getInstagramMetrics = async (igId) => {
   // batched call first, then fall back to one metric at a time so a single
   // unsupported metric never blocks the other.
   const totalValue = async (metric) => {
-    const r = await call(`${igId}/insights`, { metric, metric_type: 'total_value', period: 'day' });
+    const r = await call(`${igId}/insights`, { metric, metric_type: 'total_value', period: 'day' }, pageToken);
     const m = (r.data || [])[0];
     return m?.total_value?.value;
   };
   try {
-    const r = await call(`${igId}/insights`, { metric: 'views,total_interactions', metric_type: 'total_value', period: 'day' });
+    const r = await call(`${igId}/insights`, { metric: 'views,total_interactions', metric_type: 'total_value', period: 'day' }, pageToken);
     for (const m of r.data || []) {
       if (m.name === 'views' && m.total_value?.value != null) out.views = m.total_value.value;
       if (m.name === 'total_interactions' && m.total_value?.value != null) out.interactions = m.total_value.value;
@@ -158,40 +190,32 @@ export const getInstagramMetrics = async (igId) => {
 // Facebook Page metrics -> our Analytics fields. Page insights availability
 // varies a lot post-2024 deprecations, so we map whatever returns.
 // ---------------------------------------------------------------------------
-export const getFacebookMetrics = async (pageId) => {
+export const getFacebookMetrics = async (pageId, pageTokenIn) => {
   const out = {};
+  // Page insights REQUIRE a Page Access Token (not the user/system token).
+  const pageToken = pageTokenIn || (await getPageToken(pageId));
 
-  // Followers — node fields.
+  // Followers — node fields (work with the page token).
   try {
-    const node = await call(pageId, { fields: 'followers_count,fan_count' });
+    const node = await call(pageId, { fields: 'followers_count,fan_count' }, pageToken);
     const f = node.followers_count ?? node.fan_count;
     if (typeof f === 'number') out.followers = f;
   } catch { /* skip */ }
 
-  // Insights metrics mapped to our field names.
+  // Insights metrics that are still valid in current Graph versions (the old
+  // page_impressions / page_fan_adds names were retired in 2024). Each is fetched
+  // individually so a single unsupported metric never drops the rest.
   const MAP = {
-    page_fan_adds: 'newFollowers',
-    page_impressions_unique: 'reach',
     page_post_engagements: 'interactions',
+    page_daily_follows_unique: 'newFollowers',
     page_views_total: 'visits',
-    page_impressions: 'views', // best-available proxy for "Views"
   };
-  try {
-    const r = await call(`${pageId}/insights`, { metric: Object.keys(MAP).join(','), period: 'day' });
-    for (const m of r.data || []) {
-      const field = MAP[m.name];
-      const v = latestTs(m);
-      if (field && v != null) out[field] = v;
-    }
-  } catch {
-    // Fall back to per-metric calls so one deprecated metric doesn't drop them all.
-    for (const [metric, field] of Object.entries(MAP)) {
-      try {
-        const r = await call(`${pageId}/insights`, { metric, period: 'day' });
-        const v = latestTs((r.data || [])[0]);
-        if (v != null) out[field] = v;
-      } catch { /* skip */ }
-    }
+  for (const [metric, field] of Object.entries(MAP)) {
+    try {
+      const r = await call(`${pageId}/insights`, { metric, period: 'days_28' }, pageToken);
+      const v = latestTs((r.data || [])[0]);
+      if (v != null) out[field] = v;
+    } catch { /* skip */ }
   }
 
   return out;

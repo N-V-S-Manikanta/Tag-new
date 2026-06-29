@@ -5,9 +5,12 @@ import { logActivity } from '../utils/logActivity.js';
 import { requireOrgId } from '../utils/org.js';
 import { ACTIVITY_ACTIONS } from '../config/constants.js';
 import {
-  hasToken, listAccounts, probe, REQUIRED_SCOPES,
+  hasToken, listAccounts, probe, REQUIRED_SCOPES, getPageToken,
   getInstagramMetrics, getFacebookMetrics,
 } from '../services/metaService.js';
+
+// Never expose page access tokens to the client.
+const publicAccount = ({ pageToken, ...rest }) => rest;
 
 // Normalize a name for fuzzy matching org <-> Meta account.
 const norm = (s = '') => String(s).toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -15,6 +18,7 @@ const norm = (s = '') => String(s).toLowerCase().replace(/[^a-z0-9]/g, '');
 // Friendly, user-facing message for a Meta error.
 const explain = (e) => {
   if (e.notConfigured) return 'No Meta token is configured. Add META_SYSTEM_TOKEN to the backend .env file.';
+  if (e.metaCode === 100 && /appsecret_proof/i.test(e.message || '')) return 'Your Meta app requires an app-secret proof. Add META_APP_SECRET (Meta app → Settings → Basic → App Secret) to the backend .env and restart.';
   if (e.metaCode === 190) return 'The Meta token is invalid or expired. Generate a fresh System User token and update META_SYSTEM_TOKEN.';
   if (e.metaCode === 10 || e.metaCode === 200) return 'The token is missing required permissions. It needs instagram_basic and instagram_manage_insights.';
   if (e.metaCode === 4 || e.metaCode === 17 || e.metaCode === 32 || e.metaCode === 613) return 'Meta rate limit reached. Please wait a few minutes and try again.';
@@ -73,7 +77,7 @@ export const metaAccountsList = asyncHandler(async (req, res) => {
     const hit = accounts.find((a) => norm(a.pageName) === norm(org.name) || (a.instagramUsername && norm(a.instagramUsername) === norm(org.name)));
     if (hit) suggestions[org._id] = hit.pageId;
   }
-  res.json({ success: true, accounts, organizations: orgs, suggestions });
+  res.json({ success: true, accounts: accounts.map(publicAccount), organizations: orgs, suggestions });
 });
 
 // @route POST /api/meta/map — link an org to a Meta page/IG account.
@@ -134,15 +138,19 @@ export const syncMeta = asyncHandler(async (req, res) => {
   const written = [];
   const skipped = [];
 
+  // Page Access Token powers both Facebook page insights and the linked
+  // Instagram account's insights. Fetched once per sync.
+  const pageToken = org.metaPageId ? await getPageToken(org.metaPageId) : null;
+
   for (const platform of targets) {
     try {
       let metrics = null;
       if (platform === 'Instagram') {
         if (!org.metaInstagramId) { skipped.push({ platform, reason: 'No Instagram account linked to this organization.' }); continue; }
-        metrics = await getInstagramMetrics(org.metaInstagramId);
+        metrics = await getInstagramMetrics(org.metaInstagramId, pageToken);
       } else if (platform === 'Facebook') {
         if (!org.metaPageId) { skipped.push({ platform, reason: 'No Facebook page linked to this organization.' }); continue; }
-        metrics = await getFacebookMetrics(org.metaPageId);
+        metrics = await getFacebookMetrics(org.metaPageId, pageToken);
       } else {
         skipped.push({ platform, reason: 'Only Instagram and Facebook can sync from Meta.' }); continue;
       }

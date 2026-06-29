@@ -24,10 +24,7 @@ export const PLATFORM_FIELDS = {
     Engagement: ['engagementRate', 'comments'],
   },
   Facebook: {
-    Audience: ['followers', 'newFollowers', 'followersLast30Days'],
-    Reach: ['reach', 'impressions'],
-    Engagement: ['engagementRate', 'reactions', 'comments'],
-    Visitors: ['pageViews', 'uniqueVisitors'],
+    Overview: ['followers', 'newFollowers', 'reach', 'views', 'interactions', 'visits', 'linkClicks'],
   },
 };
 
@@ -55,6 +52,8 @@ export const FIELD_LABELS = {
   interactions: 'Interactions',
   pageViews: 'Page Views',
   uniqueVisitors: 'Unique Visitors',
+  visits: 'Visits',
+  linkClicks: 'Link Clicks',
   desktopPageViews: 'Desktop Page Views',
   mobilePageViews: 'Mobile Page Views',
   customButtonClicks: 'Custom Button Clicks',
@@ -311,6 +310,7 @@ const ANALYTICS_COLUMNS = [
   { field: 'uniqueImpressions', pats: [/uniqueimpression/] },
   { field: 'impressions', pats: [/impressionstotal/, /^impressions$/, /impressionsorganic/, /impression/] },
   { field: 'clickThroughRate', pats: [/clickthrough/, /ctr/], percent: true },
+  { field: 'linkClicks', pats: [/linkclick/] }, // before clicks so /click/ doesn't claim it
   { field: 'clicks', pats: [/clickstotal/, /^clicks$/, /clicksorganic/, /click/] },
   { field: 'engagementRate', pats: [/engagementratetotal/, /engagementrateorganic/, /engagementrate/, /engagement/], percent: true },
   { field: 'interactions', pats: [/totalinteraction/, /^interactions?$/, /interaction/] },
@@ -322,6 +322,7 @@ const ANALYTICS_COLUMNS = [
   { field: 'mobilePageViews', pats: [/mobilepageview/, /mobile/] },
   { field: 'uniqueVisitors', pats: [/uniquevisitor/] },
   { field: 'pageViews', pats: [/totalpageview/, /pageviewstotal/, /pageview/] },
+  { field: 'visits', pats: [/pagevisit|profilevisit/, /^visits?$/, /visit/] },
   { field: 'customButtonClicks', pats: [/custombutton|buttonclick|ctaclick/] },
   { field: 'searchAppearances', pats: [/searchappearance/] },
   { field: 'leadFormViews', pats: [/leadform/] },

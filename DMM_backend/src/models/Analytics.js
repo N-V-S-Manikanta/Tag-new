@@ -42,6 +42,8 @@ const analyticsSchema = new mongoose.Schema(
     // ---- Visitors ----
     pageViews: { type: Number, default: 0 },
     uniqueVisitors: { type: Number, default: 0 },
+    visits: { type: Number, default: 0 }, // Facebook/Meta: page visits
+    linkClicks: { type: Number, default: 0 }, // Facebook/Meta: link clicks
     desktopPageViews: { type: Number, default: 0 }, // LinkedIn: desktop page views
     mobilePageViews: { type: Number, default: 0 }, // LinkedIn: mobile page views
     customButtonClicks: { type: Number, default: 0 }, // LinkedIn: custom CTA button clicks

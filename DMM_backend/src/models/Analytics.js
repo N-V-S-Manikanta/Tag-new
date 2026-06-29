@@ -37,6 +37,7 @@ const analyticsSchema = new mongoose.Schema(
     reactions: { type: Number, default: 0 },
     comments: { type: Number, default: 0 },
     reposts: { type: Number, default: 0 },
+    interactions: { type: Number, default: 0 }, // Instagram: total interactions (likes + comments + saves + shares)
 
     // ---- Visitors ----
     pageViews: { type: Number, default: 0 },

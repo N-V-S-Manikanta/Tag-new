@@ -16,9 +16,7 @@ export const PLATFORM_FIELDS = {
     Discovery: ['searchAppearances'],
   },
   Instagram: {
-    Audience: ['followers', 'newFollowers', 'followersLast30Days'],
-    Reach: ['reach', 'impressions'],
-    Engagement: ['engagementRate', 'reactions', 'comments'],
+    Overview: ['followers', 'views', 'reach', 'interactions'],
   },
   YouTube: {
     Audience: ['subscribers', 'newFollowers'],
@@ -54,6 +52,7 @@ export const FIELD_LABELS = {
   reactions: 'Reactions',
   comments: 'Comments',
   reposts: 'Reposts',
+  interactions: 'Interactions',
   pageViews: 'Page Views',
   uniqueVisitors: 'Unique Visitors',
   desktopPageViews: 'Desktop Page Views',
@@ -314,6 +313,7 @@ const ANALYTICS_COLUMNS = [
   { field: 'clickThroughRate', pats: [/clickthrough/, /ctr/], percent: true },
   { field: 'clicks', pats: [/clickstotal/, /^clicks$/, /clicksorganic/, /click/] },
   { field: 'engagementRate', pats: [/engagementratetotal/, /engagementrateorganic/, /engagementrate/, /engagement/], percent: true },
+  { field: 'interactions', pats: [/totalinteraction/, /^interactions?$/, /interaction/] },
   { field: 'reactions', pats: [/reactionstotal/, /reactionsorganic/, /reaction|likes/] },
   { field: 'comments', pats: [/commentstotal/, /commentsorganic/, /comment/] },
   { field: 'reposts', pats: [/repoststotal/, /repostsorganic/, /repost|share/] },

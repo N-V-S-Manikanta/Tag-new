@@ -16,3 +16,7 @@ DMM_backend/uploads/**/*
 *.log
 .DS_Store
 Thumbs.db
+
+# Python cache from bundled skills
+__pycache__/
+*.pyc

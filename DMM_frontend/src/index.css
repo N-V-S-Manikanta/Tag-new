@@ -2,33 +2,52 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  color-scheme: light;
+@layer base {
+  :root {
+    color-scheme: light;
+    scrollbar-width: thin;
+    scrollbar-color: rgb(203 213 225) transparent;
 
-  /* Brand accent (Tag orange) as RGB channels — used by the `brand-*` Tailwind
-     colors. Light mode keeps these defaults; dark mode may override them per
-     organization at runtime (src/lib/brand.js). */
-  --brand-50: 255 247 237;
-  --brand-100: 255 237 213;
-  --brand-200: 254 215 170;
-  --brand-300: 253 186 116;
-  --brand-400: 251 146 60;
-  --brand-500: 249 115 22;
-  --brand-600: 234 88 12;
-  --brand-700: 194 65 12;
-  --brand-800: 154 52 18;
-  --brand-900: 124 45 18;
+    /* Brand accent (Tag orange) as RGB channels — used by the `brand-*` Tailwind
+       colors. Light mode keeps these defaults; dark mode may override them per
+       organization at runtime (src/lib/brand.js). */
+    --brand-50: 255 247 237;
+    --brand-100: 255 237 213;
+    --brand-200: 254 215 170;
+    --brand-300: 253 186 116;
+    --brand-400: 251 146 60;
+    --brand-500: 249 115 22;
+    --brand-600: 234 88 12;
+    --brand-700: 194 65 12;
+    --brand-800: 154 52 18;
+    --brand-900: 124 45 18;
+  }
+  .dark { color-scheme: dark; scrollbar-color: rgb(51 65 85) transparent; }
+
+  * { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+  html { scroll-behavior: smooth; }
+
+  body {
+    @apply bg-slate-50 text-slate-800 font-sans dark:bg-slate-950 dark:text-slate-200;
+  }
+
+  /* Tighter tracking + balanced wrapping on headings for a refined, professional feel */
+  h1, h2, h3 { @apply tracking-tight; text-wrap: balance; }
+
+  /* Brand-tinted text selection */
+  ::selection { @apply bg-brand-500/25 text-brand-900 dark:text-brand-50; }
+
+  /* Pointer affordance on interactive elements */
+  button:not(:disabled), [role="button"], summary { cursor: pointer; }
+
+  /* Visible keyboard-focus ring for links & bare buttons. The component <Button>
+     and form fields define their own focus styles, which take precedence. */
+  a:focus-visible, button:focus-visible, [role="button"]:focus-visible, [tabindex]:focus-visible {
+    @apply outline-none ring-2 ring-brand-500/70 ring-offset-1 ring-offset-white dark:ring-offset-slate-950;
+  }
 }
 
-* {
-  -webkit-font-smoothing: antialiased;
-}
-
-body {
-  @apply bg-slate-50 text-slate-800 font-sans dark:bg-slate-950 dark:text-slate-200;
-}
-
-/* Custom scrollbar */
+/* Custom scrollbar (WebKit) */
 ::-webkit-scrollbar { width: 9px; height: 9px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { @apply bg-slate-300 dark:bg-slate-700 rounded-full; }
@@ -44,15 +63,26 @@ body {
   }
   .input-base {
     @apply w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900
-      px-3.5 py-2.5 text-sm outline-none transition
+      px-3.5 py-2.5 text-sm outline-none transition-all duration-200
+      hover:border-slate-300 dark:hover:border-slate-600
       focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 placeholder:text-slate-400;
   }
   /* Sidebar is navy in both themes — links are light, active is orange. */
   .sidebar-link {
     @apply flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm font-medium text-slate-300
-      transition-all hover:bg-white/10 hover:text-white;
+      transition-all duration-200 hover:bg-white/10 hover:text-white;
   }
   .sidebar-link-active {
     @apply bg-brand-600 text-white shadow-sm hover:bg-brand-600 hover:text-white;
+  }
+}
+
+/* Respect users who prefer reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

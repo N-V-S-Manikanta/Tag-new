@@ -35,13 +35,13 @@ export default function Sidebar({ open, onClose }) {
             </div>
             <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-300">Admin Console</p>
           </div>
-          <button onClick={onClose} className="rounded-lg p-1.5 text-slate-300 hover:bg-white/10 lg:hidden"><X className="h-5 w-5" /></button>
+          <button onClick={onClose} aria-label="Close menu" className="rounded-lg p-1.5 text-slate-300 transition-colors hover:bg-white/10 lg:hidden"><X className="h-5 w-5" /></button>
         </div>
 
-        <nav className="flex-1 space-y-1 overflow-y-auto px-4 py-4">
+        <nav aria-label="Main navigation" className="flex-1 space-y-1 overflow-y-auto px-4 py-4">
           {NAV.map(({ to, label, icon: Icon }) => (
             <NavLink key={to} to={to} onClick={onClose} className={linkClass}>
-              <Icon className="h-[18px] w-[18px]" />
+              <Icon className="h-[18px] w-[18px] shrink-0" />
               {label}
             </NavLink>
           ))}

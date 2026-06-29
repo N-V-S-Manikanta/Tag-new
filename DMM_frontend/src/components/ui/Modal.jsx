@@ -11,9 +11,11 @@ export function Modal({ open, onClose, title, children, className, size = 'md' }
           <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             onClick={onClose}
+            aria-hidden="true"
             className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"
           />
           <motion.div
+            role="dialog" aria-modal="true" aria-label={title || 'Dialog'}
             initial={{ opacity: 0, scale: 0.95, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
@@ -23,7 +25,7 @@ export function Modal({ open, onClose, title, children, className, size = 'md' }
             {title && (
               <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 px-6 py-4">
                 <h2 className="text-lg font-bold text-slate-800 dark:text-white">{title}</h2>
-                <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800">
+                <button type="button" onClick={onClose} aria-label="Close dialog" className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-200">
                   <X className="h-5 w-5" />
                 </button>
               </div>

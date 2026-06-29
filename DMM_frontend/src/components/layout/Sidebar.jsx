@@ -58,15 +58,15 @@ export default function Sidebar({ open, onClose }) {
               <p className="text-[11px] text-slate-400">Marketing Suite</p>
             </div>
           </div>
-          <button onClick={onClose} className="rounded-lg p-1.5 text-slate-300 hover:bg-white/10 lg:hidden">
+          <button onClick={onClose} aria-label="Close menu" className="rounded-lg p-1.5 text-slate-300 transition-colors hover:bg-white/10 lg:hidden">
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        <nav className="flex-1 space-y-1 overflow-y-auto px-4 py-4">
+        <nav aria-label="Main navigation" className="flex-1 space-y-1 overflow-y-auto px-4 py-4">
           {MAIN_NAV.filter((i) => !i.roles || i.roles.includes(user?.role)).map(({ to, label, icon: Icon }) => (
             <NavLink key={to} to={to} onClick={onClose} className={linkClass}>
-              <Icon className="h-[18px] w-[18px]" />
+              <Icon className="h-[18px] w-[18px] shrink-0" />
               {label}
             </NavLink>
           ))}

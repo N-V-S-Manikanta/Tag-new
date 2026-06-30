@@ -3,6 +3,7 @@ import {
   getOrganizations,
   getOrganization,
   getOrganizationGoal,
+  listOrgOptions,
   createOrganization,
   updateOrganization,
   deleteOrganization,
@@ -13,6 +14,9 @@ import { ROLES } from '../config/constants.js';
 
 const router = express.Router();
 router.use(protect);
+
+// Org options for pickers — any authenticated user (id + name only).
+router.get('/options', listOrgOptions);
 
 // Goal + progress: any authenticated user (controller restricts CEO/USER to own org).
 router.get('/:id/goal', getOrganizationGoal);

@@ -29,9 +29,14 @@ export const userApi = {
 // ---- Analytics (social metrics management) ----
 // Social analytics — auto-scoped to the logged-in user's organization.
 export const analyticsApi = {
-  get: () => api.get('/analytics').then((r) => r.data),
-  report: (platform) => api.get(`/analytics/${platform}/report`).then((r) => r.data),
-  history: (platform) => api.get(`/analytics/${platform}/history`).then((r) => r.data),
+  get: (organizationId) => api.get('/analytics', { params: { organizationId } }).then((r) => r.data),
+  report: (platform, organizationId) => api.get(`/analytics/${platform}/report`, { params: { organizationId } }).then((r) => r.data),
+  history: (platform, organizationId) => api.get(`/analytics/${platform}/history`, { params: { organizationId } }).then((r) => r.data),
+};
+
+// ---- Organizations (options for pickers — any authenticated user) ----
+export const organizationApi = {
+  options: () => api.get('/organizations/options').then((r) => r.data),
 };
 
 // Competitor benchmark — read-only for the product app (auto-scoped to user's org).

@@ -3,7 +3,7 @@ import ExcelJS from 'exceljs';
 import Analytics from '../models/Analytics.js';
 import Organization from '../models/Organization.js';
 import { logActivity } from '../utils/logActivity.js';
-import { requireOrgId } from '../utils/org.js';
+import { requireOrgId, resolveViewOrgId } from '../utils/org.js';
 import { cellText, cellNumber, normHeader, loadGrid } from '../utils/sheet.js';
 import { ACTIVITY_ACTIONS, PLATFORMS } from '../config/constants.js';
 
@@ -77,7 +77,7 @@ const computeDelta = (current, previous) => {
 
 // @route GET /api/analytics — latest snapshot per platform for one org (+ field config)
 export const getAnalytics = asyncHandler(async (req, res) => {
-  const orgId = requireOrgId(req, res);
+  const orgId = resolveViewOrgId(req); // any user may view any org
   const latest = {};
   for (const platform of PLATFORMS) {
     latest[platform] = await Analytics.findOne({ organization: orgId, platform }).sort({ date: -1 }).lean();
@@ -87,7 +87,7 @@ export const getAnalytics = asyncHandler(async (req, res) => {
 
 // @route GET /api/analytics/:platform/report — rich report: latest, previous, WoW deltas, series
 export const getPlatformReport = asyncHandler(async (req, res) => {
-  const orgId = requireOrgId(req, res);
+  const orgId = resolveViewOrgId(req); // any user may view any org
   const { platform } = req.params;
   if (!PLATFORMS.includes(platform)) { res.status(400); throw new Error('Invalid platform'); }
 
@@ -222,7 +222,7 @@ export const getPlatformReport = asyncHandler(async (req, res) => {
 
 // @route GET /api/analytics/:platform/history — recent snapshots (kept for simple trend use)
 export const getPlatformHistory = asyncHandler(async (req, res) => {
-  const orgId = requireOrgId(req, res);
+  const orgId = resolveViewOrgId(req); // any user may view any org
   const { platform } = req.params;
   if (!PLATFORMS.includes(platform)) { res.status(400); throw new Error('Invalid platform'); }
   const history = await Analytics.find({ organization: orgId, platform }).sort({ date: -1 }).limit(30).lean();

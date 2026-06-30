@@ -28,3 +28,12 @@ export const requireOrgId = (req, res) => {
   }
   return id;
 };
+
+/**
+ * Resolve the organization for a READ-ONLY view. In the shared workspace any
+ * user may view any organization's data, so an explicit ?organizationId is
+ * honored for every role; otherwise it falls back to the user's own org.
+ * Never use this for writes — writes must stay scoped via requireOrgId.
+ */
+export const resolveViewOrgId = (req) =>
+  req.query.organizationId || req.headers['x-organization-id'] || resolveOrgId(req);

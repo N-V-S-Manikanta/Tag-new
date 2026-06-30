@@ -8,6 +8,14 @@ import Analytics from '../models/Analytics.js';
 import { uploadBuffer, deleteFile } from '../config/storage.js';
 import { APPROVAL_STATUS, PLATFORMS, ROLES } from '../config/constants.js';
 
+// @route GET /api/organizations/options — minimal active-org list for pickers
+// (approval target, analytics view). Available to ANY authenticated user so the
+// shared workspace can offer every organization to choose from.
+export const listOrgOptions = asyncHandler(async (req, res) => {
+  const orgs = await Organization.find({ isActive: true }).select('name color logo').sort({ name: 1 }).lean();
+  res.json({ success: true, organizations: orgs });
+});
+
 // @route GET /api/organizations  — list all (ADMIN). Includes quick member/post counts.
 export const getOrganizations = asyncHandler(async (req, res) => {
   const { search } = req.query;

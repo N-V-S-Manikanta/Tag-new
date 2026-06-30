@@ -10,7 +10,10 @@ const extOf = (name = '') => (name.split('.').pop() || '').toUpperCase();
 // @route GET /api/templates  — search + filter + paginate (org-scoped)
 export const getTemplates = asyncHandler(async (req, res) => {
   const { search, category, page = 1, limit = 12 } = req.query;
-  const query = { organization: requireOrgId(req, res) };
+  // Shared workspace: templates from every organization are visible. An optional
+  // ?organizationId narrows to one org.
+  const query = {};
+  if (req.query.organizationId) query.organization = req.query.organizationId;
   if (category && category !== 'All') query.category = category;
   if (search) query.$or = [
     { name: { $regex: search, $options: 'i' } },
@@ -19,7 +22,7 @@ export const getTemplates = asyncHandler(async (req, res) => {
 
   const skip = (Number(page) - 1) * Number(limit);
   const [items, total] = await Promise.all([
-    Template.find(query).populate('uploadedBy', 'name avatar').sort({ createdAt: -1 }).skip(skip).limit(Number(limit)),
+    Template.find(query).populate('uploadedBy', 'name avatar').populate('organization', 'name color').sort({ createdAt: -1 }).skip(skip).limit(Number(limit)),
     Template.countDocuments(query),
   ]);
   res.json({ success: true, total, page: Number(page), pages: Math.ceil(total / limit), templates: items });

@@ -8,11 +8,12 @@ export const formatDate = (d) => (d ? format(new Date(d), 'dd MMM yyyy') : '-');
 export const formatDateTime = (d) => (d ? format(new Date(d), 'dd MMM yyyy, HH:mm') : '-');
 export const timeAgo = (d) => (d ? formatDistanceToNow(new Date(d), { addSuffix: true }) : '-');
 
+// Show the full count with thousands separators (e.g. 12,400) — no K/M shorthand.
 export const formatNumber = (n) => {
-  if (n == null) return '0';
-  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, '') + 'M';
-  if (n >= 1_000) return (n / 1_000).toFixed(1).replace(/\.0$/, '') + 'K';
-  return String(n);
+  if (n == null || n === '') return '0';
+  const num = Number(n);
+  if (!Number.isFinite(num)) return '0';
+  return num.toLocaleString('en-US');
 };
 
 export const initials = (name = '') =>

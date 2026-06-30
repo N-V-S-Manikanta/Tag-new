@@ -6,7 +6,8 @@ import { uploadBuffer, deleteFile } from '../config/storage.js';
 import { logActivity } from '../utils/logActivity.js';
 import { createNotification } from '../utils/notify.js';
 import User from '../models/User.js';
-import { requireOrgId } from '../utils/org.js';
+import Organization from '../models/Organization.js';
+import { requireOrgId, resolveOrgId } from '../utils/org.js';
 import { APPROVAL_STATUS, ACTIVITY_ACTIONS, NOTIFICATION_TYPES, ROLES, FEEDBACK_CATEGORIES } from '../config/constants.js';
 
 const parseHashtags = (raw) => {
@@ -18,26 +19,42 @@ const parseHashtags = (raw) => {
     .filter(Boolean);
 };
 
-// Notify only the CEOs of the request's own organization.
-const notifyCEOs = async (type, title, message, request) => {
-  const ceos = await User.find({ role: ROLES.CEO, isActive: true, organization: request.organization }).select('_id');
+// Notify the people responsible for a request: the Admin(s) of the request's
+// target organization (role CEO) AND every Super Admin (who oversee all orgs).
+// Recipients are de-duplicated so a super admin who also heads the org is
+// notified once.
+const notifyApprovers = async (type, title, message, request) => {
+  const recipients = await User.find({
+    isActive: true,
+    $or: [
+      { role: ROLES.CEO, organization: request.organization },
+      { isSuperAdmin: true },
+    ],
+  }).select('_id');
+  const seen = new Set();
   await Promise.all(
-    ceos.map((c) =>
-      createNotification({
-        recipient: c._id, organization: request.organization, type, title, message,
-        link: `/approvals/${request._id}`, relatedRequest: request._id,
-      })
-    )
+    recipients
+      .filter((u) => { const k = String(u._id); if (seen.has(k)) return false; seen.add(k); return true; })
+      .map((c) =>
+        createNotification({
+          recipient: c._id, organization: request.organization, type, title, message,
+          link: `/approvals/${request._id}`, relatedRequest: request._id,
+        })
+      )
   );
 };
 
-// Org guard for a single request. CEO/USER may only touch their own org's
-// requests; ADMIN is the global head of all organizations, so they can act on
-// a request in ANY organization (no org match required).
+// Access guard for a single request:
+//  - ADMIN / Super Admin: any organization (global).
+//  - The request's creator: their own request, in ANY organization (users can
+//    submit for any org in the shared workspace).
+//  - CEO ("Admin" of an org): requests targeting their own organization.
 const assertOrgAccess = (req, res, request) => {
   if (req.user.role === ROLES.ADMIN) return;
-  const orgId = requireOrgId(req, res);
-  if (String(request.organization) !== String(orgId)) { res.status(404); throw new Error('Request not found'); }
+  if (String(request.createdBy) === String(req.user._id)) return;
+  const orgId = resolveOrgId(req);
+  if (orgId && String(request.organization) === String(orgId)) return;
+  res.status(404); throw new Error('Request not found');
 };
 
 // Attach images (from approvalImages collection) to a list of plain request objects.
@@ -57,16 +74,19 @@ const attachImages = async (requests) => {
 export const getApprovals = asyncHandler(async (req, res) => {
   const { status, platform, search, user, from, to, page = 1, limit = 12 } = req.query;
   const query = {};
-  // ADMIN spans every organization; an optional ?organizationId narrows to one.
-  // CEO/USER are always locked to their own organization.
+  // ADMIN / Super Admin span every organization (optional ?organizationId narrows).
+  // CEO ("Admin") sees every request targeting their own organization.
+  // USER sees their own requests across ALL organizations they submitted to.
   if (req.user.role === ROLES.ADMIN) {
     if (req.query.organizationId) query.organization = req.query.organizationId;
-  } else {
+    if (user) query.createdBy = user;
+  } else if (req.user.role === ROLES.CEO) {
     query.organization = requireOrgId(req, res);
+    if (user) query.createdBy = user;
+  } else {
+    query.createdBy = req.user._id;
+    if (req.query.organizationId) query.organization = req.query.organizationId;
   }
-  const privileged = [ROLES.ADMIN, ROLES.CEO].includes(req.user.role);
-  if (!privileged) query.createdBy = req.user._id;
-  else if (user) query.createdBy = user;
 
   // "REVIEW" is a convenience filter for everything awaiting a decision.
   if (status === 'REVIEW') query.status = { $in: [APPROVAL_STATUS.PENDING, APPROVAL_STATUS.RESUBMITTED] };
@@ -115,9 +135,15 @@ export const getApproval = asyncHandler(async (req, res) => {
 
 // @route POST /api/approvals  — create new request (status PENDING)
 export const createApproval = asyncHandler(async (req, res) => {
-  const orgId = requireOrgId(req, res);
-  const { title, platform, caption, description, hashtags, order, aspectRatio } = req.body;
+  const { title, platform, caption, description, hashtags, order, aspectRatio, organization } = req.body;
   if (!title || !platform) { res.status(400); throw new Error('Title and platform are required'); }
+
+  // Any user can submit a request for ANY organization. The target org comes
+  // from the form (organization); falls back to the user's own org if omitted.
+  const orgId = organization || resolveOrgId(req);
+  if (!orgId) { res.status(400); throw new Error('Please choose the organization this post is for'); }
+  const org = await Organization.findById(orgId).select('_id isActive');
+  if (!org || !org.isActive) { res.status(400); throw new Error('Selected organization does not exist'); }
 
   const request = await ApprovalRequest.create({
     organization: orgId,
@@ -144,7 +170,7 @@ export const createApproval = asyncHandler(async (req, res) => {
   await request.save();
 
   logActivity({ user: req.user._id, organization: orgId, action: ACTIVITY_ACTIONS.APPROVAL_SUBMISSION, description: `Submitted approval request "${title}"`, entityType: 'ApprovalRequest', entityId: request._id });
-  await notifyCEOs(NOTIFICATION_TYPES.NEW_REQUEST, 'New approval request', `${req.user.name} submitted "${title}"`, request);
+  await notifyApprovers(NOTIFICATION_TYPES.NEW_REQUEST, 'New approval request', `${req.user.name} submitted "${title}"`, request);
 
   const images = await ApprovalImage.find({ request: request._id }).sort({ order: 1 }).lean();
   res.status(201).json({ success: true, request: { ...request.toObject(), images } });
@@ -252,7 +278,7 @@ export const resubmitRequest = asyncHandler(async (req, res) => {
   await request.save();
 
   logActivity({ user: req.user._id, organization: request.organization, action: ACTIVITY_ACTIONS.APPROVAL_RESUBMITTED, description: `Resubmitted "${request.title}"`, entityType: 'ApprovalRequest', entityId: request._id });
-  await notifyCEOs(NOTIFICATION_TYPES.CONTENT_RESUBMITTED, 'Content resubmitted', `${req.user.name} resubmitted "${request.title}"`, request);
+  await notifyApprovers(NOTIFICATION_TYPES.CONTENT_RESUBMITTED, 'Content resubmitted', `${req.user.name} resubmitted "${request.title}"`, request);
 
   res.json({ success: true, request });
 });
@@ -271,7 +297,7 @@ export const markPosted = asyncHandler(async (req, res) => {
   await request.save();
 
   logActivity({ user: req.user._id, organization: request.organization, action: ACTIVITY_ACTIONS.POST_COMPLETION, description: `Marked "${request.title}" as posted`, entityType: 'ApprovalRequest', entityId: request._id });
-  await notifyCEOs(NOTIFICATION_TYPES.CONTENT_POSTED, 'Content posted', `${req.user.name} posted "${request.title}" on ${request.platform}`, request);
+  await notifyApprovers(NOTIFICATION_TYPES.CONTENT_POSTED, 'Content posted', `${req.user.name} posted "${request.title}" on ${request.platform}`, request);
 
   res.json({ success: true, request });
 });

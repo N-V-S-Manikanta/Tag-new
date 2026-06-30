@@ -13,15 +13,17 @@ const mediaTypeFromMime = (mime = '') => {
 
 // @route GET /api/brand — list brand library items for the active org
 export const listBrandAssets = asyncHandler(async (req, res) => {
-  const orgId = requireOrgId(req, res);
+  // Shared workspace: brand assets from every organization are visible. An
+  // optional ?organizationId narrows to one org.
   const { category, search } = req.query;
-  const query = { organization: orgId };
+  const query = {};
+  if (req.query.organizationId) query.organization = req.query.organizationId;
   if (category && category !== 'All') query.category = category;
   if (search) query.$or = [
     { title: { $regex: search, $options: 'i' } },
     { description: { $regex: search, $options: 'i' } },
   ];
-  const items = await BrandAsset.find(query).populate('uploadedBy', 'name').sort({ createdAt: -1 }).lean();
+  const items = await BrandAsset.find(query).populate('uploadedBy', 'name').populate('organization', 'name color').sort({ createdAt: -1 }).lean();
   res.json({ success: true, categories: BRAND_CATEGORIES, items });
 });
 

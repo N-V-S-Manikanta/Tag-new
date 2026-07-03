@@ -2,6 +2,8 @@ import asyncHandler from 'express-async-handler';
 import ExcelJS from 'exceljs';
 import Analytics from '../models/Analytics.js';
 import Organization from '../models/Organization.js';
+import SocialAccount from '../models/SocialAccount.js';
+import Website from '../models/Website.js';
 import { logActivity } from '../utils/logActivity.js';
 import { requireOrgId, resolveViewOrgId } from '../utils/org.js';
 import { cellText, cellNumber, normHeader, loadGrid } from '../utils/sheet.js';
@@ -82,6 +84,62 @@ export const getAnalytics = asyncHandler(async (req, res) => {
     latest[platform] = await Analytics.findOne({ organization: orgId, platform }).sort({ date: -1 }).lean();
   }
   res.json({ success: true, fields: PLATFORM_FIELDS, labels: FIELD_LABELS, percentFields: [...PERCENT_FIELDS], latest });
+});
+
+// @route GET /api/analytics/overview  (ADMIN) — a matrix of every organization ×
+// platform: whether an account exists, its follower/subscriber count, handle,
+// profile URL and when it was last updated. Powers the Social Analytics grid.
+export const getAnalyticsOverview = asyncHandler(async (req, res) => {
+  const orgs = await Organization.find({ isActive: true }).select('name color').sort({ name: 1 }).lean();
+
+  // Latest analytics snapshot per (org, platform).
+  const latest = await Analytics.aggregate([
+    { $sort: { date: -1 } },
+    { $group: { _id: { org: '$organization', platform: '$platform' }, followers: { $first: '$followers' }, subscribers: { $first: '$subscribers' }, date: { $first: '$date' } } },
+  ]);
+  const anaMap = new Map();
+  for (const a of latest) anaMap.set(`${a._id.org}|${a._id.platform}`, a);
+
+  // Social handler entries (existence + handle + profile URL), incl. X (Twitter).
+  const socials = await SocialAccount.find().select('organization platform accountName profileUrl updatedAt').lean();
+  const socMap = new Map();
+  for (const s of socials) if (s.organization) socMap.set(`${s.organization}|${s.platform}`, s);
+
+  // One website per org (first match).
+  const sites = await Website.find({ organization: { $ne: null } }).select('organization institution domain updatedAt').lean();
+  const siteMap = new Map();
+  for (const w of sites) if (!siteMap.has(String(w.organization))) siteMap.set(String(w.organization), w);
+
+  const ANALYTICS_PLATFORMS = [
+    { key: 'LinkedIn', metric: 'followers', label: 'Followers' },
+    { key: 'Instagram', metric: 'followers', label: 'Followers' },
+    { key: 'Facebook', metric: 'followers', label: 'Followers' },
+    { key: 'YouTube', metric: 'subscribers', label: 'Subscribers' },
+  ];
+
+  const organizations = orgs.map((o) => {
+    const cells = {};
+    for (const p of ANALYTICS_PLATFORMS) {
+      const a = anaMap.get(`${o._id}|${p.key}`);
+      const s = socMap.get(`${o._id}|${p.key}`);
+      const metric = a ? (p.metric === 'subscribers' ? a.subscribers : a.followers) : null;
+      cells[p.key] = (a || s)
+        ? { exists: true, metric: metric != null ? metric : null, label: p.label, username: s?.accountName || '', url: s?.profileUrl || '', lastUpdated: a?.date || s?.updatedAt || null }
+        : { exists: false };
+    }
+    const x = socMap.get(`${o._id}|X (Twitter)`);
+    cells['X (Twitter)'] = x ? { exists: true, metric: null, label: null, username: x.accountName || '', url: x.profileUrl || '', lastUpdated: x.updatedAt || null } : { exists: false };
+    const w = siteMap.get(String(o._id));
+    cells['Website'] = w ? { exists: true, metric: null, label: null, username: w.institution || '', url: w.domain || '', lastUpdated: w.updatedAt || null } : { exists: false };
+    return { _id: o._id, name: o.name, color: o.color, cells };
+  });
+
+  const platforms = [
+    ...ANALYTICS_PLATFORMS.map((p) => ({ ...p, kind: 'analytics' })),
+    { key: 'X (Twitter)', kind: 'social' },
+    { key: 'Website', kind: 'website' },
+  ];
+  res.json({ success: true, platforms, organizations });
 });
 
 // @route GET /api/analytics/:platform/report — rich report: latest, previous, WoW deltas, series

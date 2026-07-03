@@ -35,6 +35,7 @@ export const analyticsApi = {
   get: (organizationId) => api.get('/analytics', { params: { organizationId } }).then((r) => r.data),
   report: (platform, organizationId, range) => api.get(`/analytics/${platform}/report`, { params: { organizationId, range } }).then((r) => r.data),
   compare: (platform, metric) => api.get('/analytics/compare', { params: { platform, metric } }).then((r) => r.data),
+  overview: () => api.get('/analytics/overview').then((r) => r.data),
   record: (data) => api.post('/analytics', data).then((r) => r.data),
   clear: (platform, organizationId) => api.delete('/analytics', { params: { platform, organizationId } }).then((r) => r.data),
   import: (formData) => api.post('/analytics/import', formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data),

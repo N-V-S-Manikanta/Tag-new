@@ -1,14 +1,16 @@
 import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { Linkedin, Instagram, Youtube, Facebook, Save, BarChart3, PenLine, Trophy, Users, Upload, Download, FileSpreadsheet, Trash2 } from 'lucide-react';
+import { Linkedin, Instagram, Youtube, Facebook, Save, BarChart3, PenLine, Trophy, Users, Upload, Download, FileSpreadsheet, Trash2, LayoutGrid } from 'lucide-react';
 import { analyticsApi } from '../api/endpoints.js';
 import { downloadBlob } from '../lib/utils.js';
+import { useOrgStore } from '../store/orgStore.js';
 import PageHeader from '../components/layout/PageHeader.jsx';
 import OrgPicker from '../components/OrgPicker.jsx';
 import AnalyticsReport from '../components/AnalyticsReport.jsx';
 import CompetitorManager from '../components/CompetitorManager.jsx';
 import OrgCompare from '../components/OrgCompare.jsx';
+import AnalyticsOverview from '../components/AnalyticsOverview.jsx';
 import MetaSync from '../components/MetaSync.jsx';
 import YoutubeSync from '../components/YoutubeSync.jsx';
 import { Button } from '../components/ui/Button.jsx';
@@ -23,15 +25,28 @@ const PLATFORMS = [
 ];
 
 export default function Analytics() {
-  const [tab, setTab] = useState('org');
+  const [tab, setTab] = useState('overview');
+  const [pendingPlatform, setPendingPlatform] = useState(null);
+  const { setSelectedOrg } = useOrgStore();
+
+  // From the overview grid: jump straight to one org + platform's analytics.
+  const openOrgPlatform = (orgId, platform) => {
+    setSelectedOrg(orgId);
+    setPendingPlatform(platform);
+    setTab('org');
+  };
+
   return (
     <div>
-      <PageHeader title="Social Media Analytics" subtitle="Enter weekly metrics, track week-over-week changes, and compare organizations." />
-      <div className="mb-5 inline-flex rounded-xl bg-slate-100 dark:bg-slate-800 p-1">
+      <PageHeader title="Social Media Analytics" subtitle="See every organization's platforms at a glance, track week-over-week changes, and compare organizations." />
+      <div className="mb-5 inline-flex flex-wrap rounded-xl bg-slate-100 dark:bg-slate-800 p-1">
+        <TabBtn active={tab === 'overview'} onClick={() => setTab('overview')} icon={LayoutGrid}>Overview grid</TabBtn>
         <TabBtn active={tab === 'org'} onClick={() => setTab('org')} icon={BarChart3}>Per organization</TabBtn>
         <TabBtn active={tab === 'compare'} onClick={() => setTab('compare')} icon={Trophy}>Compare organizations</TabBtn>
       </div>
-      {tab === 'org' ? <OrgPicker>{(orgId) => <OrgAnalytics orgId={orgId} />}</OrgPicker> : <OrgCompare />}
+      {tab === 'overview' && <AnalyticsOverview onOpen={openOrgPlatform} />}
+      {tab === 'org' && <OrgPicker>{(orgId) => <OrgAnalytics orgId={orgId} initialPlatform={pendingPlatform} />}</OrgPicker>}
+      {tab === 'compare' && <OrgCompare />}
     </div>
   );
 }
@@ -49,9 +64,9 @@ const RANGES = [
   { value: 90, label: 'Past 90 days' },
 ];
 
-function OrgAnalytics({ orgId }) {
+function OrgAnalytics({ orgId, initialPlatform }) {
   const qc = useQueryClient();
-  const [platform, setPlatform] = useState('LinkedIn');
+  const [platform, setPlatform] = useState(initialPlatform || 'LinkedIn');
   const [mode, setMode] = useState('report');
   const [range, setRange] = useState(7);
   const fileRef = useRef(null);

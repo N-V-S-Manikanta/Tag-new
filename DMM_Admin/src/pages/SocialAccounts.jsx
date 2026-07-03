@@ -157,15 +157,13 @@ export default function SocialAccounts() {
 function ContactModal({ handler, account, onClose }) {
   const h = handler;
   const copy = (text) => { navigator.clipboard?.writeText(text); toast.success('Copied'); };
-  const Row = ({ icon: Icon, label, value, href, onCopy }) => value ? (
-    <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 px-3.5 py-2.5 dark:border-slate-800">
-      <div className="flex min-w-0 items-center gap-2.5">
-        <Icon className="h-4 w-4 shrink-0 text-slate-400" />
-        <div className="min-w-0">
-          <p className="text-[11px] uppercase tracking-wide text-slate-400">{label}</p>
-          {href ? <a href={href} target={href.startsWith('http') ? '_blank' : undefined} rel="noreferrer" className="truncate font-medium text-brand-600 hover:underline dark:text-brand-400">{value}</a>
-                : <p className="truncate font-medium text-slate-700 dark:text-slate-200">{value}</p>}
-        </div>
+  const Row = ({ icon: Icon, label, value, display, href, onCopy }) => value ? (
+    <div className="flex items-center gap-3 rounded-xl border border-slate-100 px-3.5 py-2.5 dark:border-slate-800">
+      <Icon className="h-4 w-4 shrink-0 text-slate-400" />
+      <div className="min-w-0 flex-1">
+        <p className="text-[11px] uppercase tracking-wide text-slate-400">{label}</p>
+        {href ? <a href={href} target={href.startsWith('http') ? '_blank' : undefined} rel="noreferrer" className="block truncate font-medium text-brand-600 hover:underline dark:text-brand-400">{display || value}</a>
+              : <p className="block truncate font-medium text-slate-700 dark:text-slate-200">{display || value}</p>}
       </div>
       {onCopy && <button type="button" onClick={() => copy(value)} className="shrink-0 rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-brand-600 dark:hover:bg-slate-800" title="Copy"><Copy className="h-3.5 w-3.5" /></button>}
     </div>
@@ -191,7 +189,7 @@ function ContactModal({ handler, account, onClose }) {
         <div className="space-y-2">
           <Row icon={Mail} label="Email" value={h.email} href={h.email ? `mailto:${h.email}` : undefined} onCopy />
           <Row icon={Phone} label="Phone" value={h.phone} href={h.phone ? `tel:${h.phone}` : undefined} onCopy />
-          <Row icon={Linkedin} label="LinkedIn" value={h.linkedinUrl} href={h.linkedinUrl || undefined} />
+          <Row icon={Linkedin} label="LinkedIn" value={h.linkedinUrl} display={h.linkedinUrl?.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '')} href={h.linkedinUrl || undefined} onCopy />
         </div>
 
         {!h.email && !h.phone && !h.linkedinUrl && (

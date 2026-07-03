@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { Images, Plus, Trash2, ExternalLink, Download, Film, FileText, LinkIcon } from 'lucide-react';
+import { Images, Plus, Trash2, ExternalLink, Download, Film, FileText, LinkIcon, Play } from 'lucide-react';
 import { brandApi } from '../api/endpoints.js';
+import { youtubeThumb } from '../lib/utils.js';
 import PageHeader from '../components/layout/PageHeader.jsx';
 import OrgPicker from '../components/OrgPicker.jsx';
 import { Button } from '../components/ui/Button.jsx';
@@ -63,11 +64,19 @@ function Inner({ orgId }) {
 
 function BrandCard({ item, onDelete }) {
   const url = fileUrl(item.url);
+  const ytThumb = item.kind === 'link' ? youtubeThumb(item.url) : null;
   return (
     <Card className="overflow-hidden">
       <div className="relative flex aspect-video items-center justify-center bg-slate-100 dark:bg-slate-800">
         {item.mediaType === 'image' ? (
           <img src={url} alt={item.title} className="h-full w-full object-cover" />
+        ) : ytThumb ? (
+          <a href={url} target="_blank" rel="noreferrer" className="group/thumb block h-full w-full">
+            <img src={ytThumb} alt={item.title} className="h-full w-full object-cover" />
+            <span className="absolute inset-0 flex items-center justify-center bg-black/10 transition-colors group-hover/thumb:bg-black/25">
+              <span className="flex h-12 w-12 items-center justify-center rounded-full bg-red-600 text-white shadow-lg"><Play className="h-6 w-6 translate-x-0.5 fill-white" /></span>
+            </span>
+          </a>
         ) : item.mediaType === 'video' ? (
           <video src={url} className="h-full w-full object-cover" muted />
         ) : item.kind === 'link' ? (

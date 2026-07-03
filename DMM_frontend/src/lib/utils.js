@@ -16,6 +16,18 @@ export const formatNumber = (n) => {
   return num.toLocaleString('en-US');
 };
 
+// Extract a YouTube video id from common URL forms (watch, youtu.be, embed, shorts, live).
+export const youtubeId = (url = '') => {
+  const m = String(url).match(/(?:youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/|live\/)|youtu\.be\/)([\w-]{11})/i);
+  return m ? m[1] : null;
+};
+
+// Preview thumbnail image for a YouTube link (or null if it isn't one).
+export const youtubeThumb = (url = '') => {
+  const id = youtubeId(url);
+  return id ? `https://img.youtube.com/vi/${id}/hqdefault.jpg` : null;
+};
+
 export const formatBytes = (bytes) => {
   if (!bytes) return '0 B';
   const k = 1024;

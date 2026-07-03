@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Images, ExternalLink, Download, FileText, Link as LinkIcon } from 'lucide-react';
+import { Images, ExternalLink, Download, FileText, Link as LinkIcon, Play } from 'lucide-react';
 import { libraryApi } from '../api/endpoints.js';
+import { youtubeThumb } from '../lib/utils.js';
 import PageHeader from '../components/layout/PageHeader.jsx';
 import { Card, Select, Skeleton, EmptyState } from '../components/ui/primitives.jsx';
 
@@ -32,6 +33,14 @@ export default function BrandLibrary() {
             <Card key={it._id} className="overflow-hidden">
               <div className="relative flex aspect-video items-center justify-center bg-slate-100 dark:bg-slate-800">
                 {it.mediaType === 'image' ? <img src={it.url} alt={it.title} className="h-full w-full object-cover" />
+                  : (it.kind === 'link' && youtubeThumb(it.url)) ? (
+                    <a href={it.url} target="_blank" rel="noreferrer" className="group/thumb block h-full w-full">
+                      <img src={youtubeThumb(it.url)} alt={it.title} className="h-full w-full object-cover" />
+                      <span className="absolute inset-0 flex items-center justify-center bg-black/10 transition-colors group-hover/thumb:bg-black/25">
+                        <span className="flex h-12 w-12 items-center justify-center rounded-full bg-red-600 text-white shadow-lg"><Play className="h-6 w-6 translate-x-0.5 fill-white" /></span>
+                      </span>
+                    </a>
+                  )
                   : it.mediaType === 'video' ? <video src={it.url} className="h-full w-full object-cover" muted />
                   : it.kind === 'link' ? <LinkIcon className="h-10 w-10 text-slate-400" />
                   : <FileText className="h-10 w-10 text-slate-400" />}

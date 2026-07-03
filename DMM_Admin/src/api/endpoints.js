@@ -81,6 +81,11 @@ export const approvalApi = {
   remove: (id) => api.delete(`/approvals/${id}`).then((r) => r.data),
 };
 
+// Open-Graph link preview (thumbnail/title) for external links.
+export const linkApi = {
+  preview: (url) => api.get('/link-preview', { params: { url } }).then((r) => r.data),
+};
+
 // Events — Zolo event photos (folder links). Shared across the workspace.
 export const eventApi = {
   list: (params) => api.get('/events', { params }).then((r) => r.data),

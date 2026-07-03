@@ -26,6 +26,7 @@ import calendarRoutes from './routes/calendarRoutes.js';
 import metaRoutes from './routes/metaRoutes.js';
 import eventRoutes from './routes/eventRoutes.js';
 import youtubeRoutes from './routes/youtubeRoutes.js';
+import linkRoutes from './routes/linkRoutes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -72,6 +73,7 @@ app.use('/api/analytics', analyticsRoutes);
 app.use('/api/meta', metaRoutes);
 app.use('/api/events', eventRoutes);
 app.use('/api/youtube', youtubeRoutes);
+app.use('/api/link-preview', linkRoutes);
 app.use('/api/competitors', competitorRoutes);
 app.use('/api/purchases', purchaseRoutes);
 app.use('/api/brand', brandAssetRoutes);

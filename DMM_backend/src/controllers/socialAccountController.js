@@ -11,8 +11,15 @@ const cleanHandlers = (raw) => {
   if (typeof raw === 'string') { try { arr = JSON.parse(raw); } catch { arr = []; } }
   if (!Array.isArray(arr)) return [];
   return arr
-    .map((h) => ({ name: (h.name || '').trim(), email: (h.email || '').trim(), phone: (h.phone || '').trim(), role: (h.role || '').trim() }))
-    .filter((h) => h.name || h.email || h.phone);
+    .map((h) => ({
+      // Accept a linked user id (from the user picker) or null for manual entry.
+      user: /^[0-9a-fA-F]{24}$/.test(String(h.user?._id || h.user || '')) ? String(h.user?._id || h.user) : null,
+      name: (h.name || '').trim(),
+      email: (h.email || '').trim(),
+      phone: (h.phone || '').trim(),
+      role: (h.role || '').trim(),
+    }))
+    .filter((h) => h.user || h.name || h.email || h.phone);
 };
 const cleanEmails = (raw) => {
   const arr = Array.isArray(raw) ? raw : String(raw || '').split(/[,\n]/);
@@ -45,7 +52,29 @@ export const listSocialAccounts = asyncHandler(async (req, res) => {
     const rx = { $regex: req.query.search, $options: 'i' };
     query.$or = [{ accountName: rx }, { ownerName: rx }, { ownerEmail: rx }, { 'handlers.name': rx }, { 'handlers.email': rx }];
   }
-  const accounts = await SocialAccount.find(query).populate('organization', 'name color').sort({ platform: 1 }).lean();
+  const accounts = await SocialAccount.find(query)
+    .populate('organization', 'name color')
+    .populate('handlers.user', 'name email phone linkedinUrl avatar jobTitle role isSuperAdmin isActive')
+    .sort({ platform: 1 })
+    .lean();
+
+  // Handlers linked to a real user account show that user's LIVE details —
+  // name/email/phone/LinkedIn come from User Management so they never go stale.
+  for (const a of accounts) {
+    a.handlers = (a.handlers || []).map((h) => {
+      const u = h.user && typeof h.user === 'object' ? h.user : null;
+      return {
+        ...h,
+        name: u?.name || h.name,
+        email: u?.email || h.email,
+        phone: u?.phone || h.phone,
+        linkedinUrl: u?.linkedinUrl || '',
+        avatar: u?.avatar || '',
+        jobTitle: u?.jobTitle || '',
+        linked: !!u,
+      };
+    });
+  }
   res.json({ success: true, accounts });
 });
 

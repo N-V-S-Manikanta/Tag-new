@@ -14,6 +14,8 @@ const sanitize = (u) => ({
   isSuperAdmin: !!u.isSuperAdmin,
   avatar: u.avatar,
   jobTitle: u.jobTitle,
+  phone: u.phone || '',
+  linkedinUrl: u.linkedinUrl || '',
   skills: u.skills || [],
   isActive: u.isActive,
   settings: u.settings,
@@ -49,7 +51,7 @@ export const getUsers = asyncHandler(async (req, res) => {
 
 // @route POST /api/users  (ADMIN) — create a new user
 export const createUser = asyncHandler(async (req, res) => {
-  const { name, email, password, role, jobTitle, organization, skills, isSuperAdmin } = req.body;
+  const { name, email, password, role, jobTitle, organization, skills, isSuperAdmin, phone, linkedinUrl } = req.body;
   if (!name || !email || !password) {
     res.status(400);
     throw new Error('Name, email and password are required');
@@ -80,7 +82,7 @@ export const createUser = asyncHandler(async (req, res) => {
     res.status(400);
     throw new Error('A user with this email already exists');
   }
-  const user = await User.create({ name, email, password, role: finalRole, isSuperAdmin: wantSuper, jobTitle: jobTitle || '', skills: parseSkills(skills), organization: orgId });
+  const user = await User.create({ name, email, password, role: finalRole, isSuperAdmin: wantSuper, jobTitle: jobTitle || '', phone: phone || '', linkedinUrl: linkedinUrl || '', skills: parseSkills(skills), organization: orgId });
 
   logActivity({ user: req.user._id, organization: orgId, action: ACTIVITY_ACTIONS.USER_CREATED, description: `Created user "${name}" (${user.role})`, entityType: 'User', entityId: user._id });
 
@@ -110,7 +112,7 @@ export const updateUser = asyncHandler(async (req, res) => {
   const user = await User.findById(req.params.id);
   if (!user) { res.status(404); throw new Error('User not found'); }
 
-  const { name, role, jobTitle, isActive, organization, skills, isSuperAdmin } = req.body;
+  const { name, role, jobTitle, isActive, organization, skills, isSuperAdmin, phone, linkedinUrl } = req.body;
   const wantSuper = isSuperAdmin === true || isSuperAdmin === 'true';
 
   // A super admin can't be deactivated. Its role can't be changed unless it's
@@ -137,6 +139,8 @@ export const updateUser = asyncHandler(async (req, res) => {
 
   if (name) user.name = name;
   if (jobTitle !== undefined) user.jobTitle = jobTitle;
+  if (phone !== undefined) user.phone = phone;
+  if (linkedinUrl !== undefined) user.linkedinUrl = linkedinUrl;
   if (skills !== undefined) user.skills = parseSkills(skills);
   if (typeof isActive === 'boolean') user.isActive = isActive;
 
@@ -203,9 +207,11 @@ export const deleteUser = asyncHandler(async (req, res) => {
 // @route PUT /api/users/profile
 export const updateProfile = asyncHandler(async (req, res) => {
   const user = await User.findById(req.user._id);
-  const { name, jobTitle } = req.body;
+  const { name, jobTitle, phone, linkedinUrl } = req.body;
   if (name) user.name = name;
   if (jobTitle !== undefined) user.jobTitle = jobTitle;
+  if (phone !== undefined) user.phone = phone;
+  if (linkedinUrl !== undefined) user.linkedinUrl = linkedinUrl;
 
   if (req.file) {
     if (user.avatarPublicId) await deleteFile(user.avatarPublicId);

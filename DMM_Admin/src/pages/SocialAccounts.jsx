@@ -1,8 +1,8 @@
 import { useMemo, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { Share2, Plus, Pencil, Trash2, Mail, Phone, Users, ExternalLink, X, Upload, Download, FileSpreadsheet, Linkedin, Instagram, Youtube, Facebook, Twitter, Building2 } from 'lucide-react';
-import { socialAccountApi, organizationApi } from '../api/endpoints.js';
+import { Share2, Plus, Pencil, Trash2, Mail, Phone, Users, ExternalLink, X, Upload, Download, FileSpreadsheet, Linkedin, Instagram, Youtube, Facebook, Twitter, Building2, Link2, UserCheck, Copy } from 'lucide-react';
+import { socialAccountApi, organizationApi, userApi } from '../api/endpoints.js';
 import { downloadBlob } from '../lib/utils.js';
 import PageHeader from '../components/layout/PageHeader.jsx';
 import { Button } from '../components/ui/Button.jsx';
@@ -32,13 +32,14 @@ const roleBadge = (role = '') => {
   return 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300';
 };
 
-const blankHandler = { name: '', email: '', phone: '', role: '' };
+const blankHandler = { user: null, name: '', email: '', phone: '', role: '' };
 const blank = { platform: 'LinkedIn', organization: '', accountName: '', profileUrl: '', ownerName: '', ownerEmail: '', linkedEmails: '', accessCount: 0, notes: '', handlers: [{ ...blankHandler }] };
 
 export default function SocialAccounts() {
   const qc = useQueryClient();
   const [filters, setFilters] = useState({ organizationId: 'all', platform: 'All', search: '' });
   const [modal, setModal] = useState(null);
+  const [contact, setContact] = useState(null); // handler being viewed
   const fileRef = useRef(null);
 
   const { data: orgData } = useQuery({ queryKey: ['organizations', 'picker'], queryFn: () => organizationApi.list() });
@@ -138,7 +139,7 @@ export default function SocialAccounts() {
               </div>
 
               <div className="grid gap-3 xl:grid-cols-2">
-                {g.items.map((a) => <PlatformCard key={a._id} a={a} onEdit={() => setModal({ type: 'edit', item: a })} onRemove={() => window.confirm('Remove this account?') && removeMut.mutate(a._id)} />)}
+                {g.items.map((a) => <PlatformCard key={a._id} a={a} onEdit={() => setModal({ type: 'edit', item: a })} onRemove={() => window.confirm('Remove this account?') && removeMut.mutate(a._id)} onOpenContact={(h) => setContact({ handler: h, account: a })} />)}
               </div>
             </section>
           ))}
@@ -146,7 +147,64 @@ export default function SocialAccounts() {
       )}
 
       {modal && <AccountModal item={modal.item} orgs={orgs} onClose={() => setModal(null)} onSaved={() => { setModal(null); qc.invalidateQueries({ queryKey: ['social-accounts'] }); }} />}
+      {contact && <ContactModal handler={contact.handler} account={contact.account} onClose={() => setContact(null)} />}
     </div>
+  );
+}
+
+// Contact card shown when a handler's name is clicked. For linked users it shows
+// their live account details; you can email, call, or open their LinkedIn directly.
+function ContactModal({ handler, account, onClose }) {
+  const h = handler;
+  const copy = (text) => { navigator.clipboard?.writeText(text); toast.success('Copied'); };
+  const Row = ({ icon: Icon, label, value, href, onCopy }) => value ? (
+    <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 px-3.5 py-2.5 dark:border-slate-800">
+      <div className="flex min-w-0 items-center gap-2.5">
+        <Icon className="h-4 w-4 shrink-0 text-slate-400" />
+        <div className="min-w-0">
+          <p className="text-[11px] uppercase tracking-wide text-slate-400">{label}</p>
+          {href ? <a href={href} target={href.startsWith('http') ? '_blank' : undefined} rel="noreferrer" className="truncate font-medium text-brand-600 hover:underline dark:text-brand-400">{value}</a>
+                : <p className="truncate font-medium text-slate-700 dark:text-slate-200">{value}</p>}
+        </div>
+      </div>
+      {onCopy && <button type="button" onClick={() => copy(value)} className="shrink-0 rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-brand-600 dark:hover:bg-slate-800" title="Copy"><Copy className="h-3.5 w-3.5" /></button>}
+    </div>
+  ) : null;
+
+  return (
+    <Modal open onClose={onClose} title="Contact details" size="sm">
+      <div className="space-y-4">
+        <div className="flex items-center gap-3">
+          {h.avatar ? <img src={h.avatar} alt={h.name} className="h-14 w-14 rounded-full object-cover" />
+            : <div className="flex h-14 w-14 items-center justify-center rounded-full bg-brand-100 text-lg font-bold text-brand-700 dark:bg-brand-900 dark:text-brand-200">{(h.name || '?').slice(0, 1).toUpperCase()}</div>}
+          <div className="min-w-0">
+            <p className="flex items-center gap-1.5 text-lg font-bold text-slate-800 dark:text-white">
+              {h.name || 'Unnamed'}
+              {h.linked && <span title="Linked to a user account" className="text-emerald-500"><UserCheck className="h-4 w-4" /></span>}
+            </p>
+            <p className="text-xs text-slate-400">
+              {[h.role, h.jobTitle].filter(Boolean).join(' · ')}{h.role || h.jobTitle ? ' · ' : ''}{account.platform} @ {account.organization?.name || 'Org'}
+            </p>
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <Row icon={Mail} label="Email" value={h.email} href={h.email ? `mailto:${h.email}` : undefined} onCopy />
+          <Row icon={Phone} label="Phone" value={h.phone} href={h.phone ? `tel:${h.phone}` : undefined} onCopy />
+          <Row icon={Linkedin} label="LinkedIn" value={h.linkedinUrl} href={h.linkedinUrl || undefined} />
+        </div>
+
+        {!h.email && !h.phone && !h.linkedinUrl && (
+          <p className="rounded-xl bg-slate-50 px-3.5 py-2.5 text-sm text-slate-400 dark:bg-slate-800/50">No contact details on file{h.linked ? '' : ' — link this handler to a user account to pull live details'}.</p>
+        )}
+
+        <div className="flex flex-wrap gap-2 pt-1">
+          {h.email && <a href={`mailto:${h.email}`} className="inline-flex items-center gap-1.5 rounded-xl bg-brand-600 px-3.5 py-2 text-sm font-semibold text-white hover:bg-brand-700"><Mail className="h-4 w-4" /> Email</a>}
+          {h.phone && <a href={`tel:${h.phone}`} className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-3.5 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"><Phone className="h-4 w-4" /> Call</a>}
+          {h.linkedinUrl && <a href={h.linkedinUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-3.5 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"><Linkedin className="h-4 w-4" /> LinkedIn</a>}
+        </div>
+      </div>
+    </Modal>
   );
 }
 
@@ -157,7 +215,7 @@ const Legend = ({ className, children }) => (
   </span>
 );
 
-function PlatformCard({ a, onEdit, onRemove }) {
+function PlatformCard({ a, onEdit, onRemove, onOpenContact }) {
   const meta = PLATFORM_META[a.platform] || { icon: Share2, color: '#64748b' };
   const Icon = meta.icon;
 
@@ -207,11 +265,13 @@ function PlatformCard({ a, onEdit, onRemove }) {
             <div key={role} className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
               <span className={`rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide ${roleBadge(role)}`}>{role}</span>
               {people.map((h, i) => (
-                <span key={i} className="inline-flex items-center gap-1.5 rounded-lg bg-slate-50 px-2 py-1 text-sm text-slate-700 dark:bg-slate-800/60 dark:text-slate-200">
-                  {h.name}
-                  {h.email && <a href={`mailto:${h.email}`} title={h.email} className="text-slate-400 hover:text-brand-600"><Mail className="h-3.5 w-3.5" /></a>}
-                  {h.phone && <a href={`tel:${h.phone}`} title={h.phone} className="text-slate-400 hover:text-brand-600"><Phone className="h-3.5 w-3.5" /></a>}
-                </span>
+                <button key={i} type="button" onClick={() => onOpenContact(h)} title="View contact details"
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-slate-50 px-2 py-1 text-sm text-slate-700 transition-colors hover:bg-brand-50 hover:text-brand-700 dark:bg-slate-800/60 dark:text-slate-200 dark:hover:bg-brand-500/10">
+                  {h.linked && <UserCheck className="h-3.5 w-3.5 text-emerald-500" />}
+                  <span className="font-medium">{h.name}</span>
+                  {h.email && <Mail className="h-3.5 w-3.5 text-slate-400" />}
+                  {h.phone && <Phone className="h-3.5 w-3.5 text-slate-400" />}
+                </button>
               ))}
             </div>
           ))
@@ -240,18 +300,31 @@ const roleRank = (role = '') => {
 
 function AccountModal({ item, orgs, onClose, onSaved }) {
   const [form, setForm] = useState(item
-    ? { ...blank, ...item, organization: item.organization?._id || item.organization || '', linkedEmails: (item.linkedEmails || []).join(', '), handlers: item.handlers?.length ? item.handlers.map((h) => ({ ...blankHandler, ...h })) : [{ ...blankHandler }] }
+    ? { ...blank, ...item, organization: item.organization?._id || item.organization || '', linkedEmails: (item.linkedEmails || []).join(', '), handlers: item.handlers?.length ? item.handlers.map((h) => ({ ...blankHandler, ...h, user: h.user?._id || h.user || null })) : [{ ...blankHandler }] }
     : blank);
   const [loading, setLoading] = useState(false);
   const set = (k, v) => setForm({ ...form, [k]: v });
   const setHandler = (i, k, v) => setForm({ ...form, handlers: form.handlers.map((h, idx) => (idx === i ? { ...h, [k]: v } : h)) });
+
+  // Users available to link handlers to (their live email/phone/LinkedIn get shown).
+  const { data: userData } = useQuery({ queryKey: ['users', 'picker'], queryFn: () => userApi.list() });
+  const users = userData?.users || [];
+  const linkUser = (i, userId) => {
+    const u = users.find((x) => x._id === userId);
+    setForm({
+      ...form,
+      handlers: form.handlers.map((h, idx) => idx === i
+        ? (u ? { ...h, user: u._id, name: u.name, email: u.email, phone: u.phone || '' } : { ...h, user: null })
+        : h),
+    });
+  };
 
   const submit = async (e) => {
     e.preventDefault();
     if (!item && !form.organization) { toast.error('Choose an organization'); return; }
     setLoading(true);
     try {
-      const payload = { ...form, handlers: form.handlers.filter((h) => h.name || h.email || h.phone) };
+      const payload = { ...form, handlers: form.handlers.filter((h) => h.user || h.name || h.email || h.phone) };
       if (item) await socialAccountApi.update(item._id, payload);
       else await socialAccountApi.create(payload);
       toast.success('Saved'); onSaved();
@@ -290,17 +363,24 @@ function AccountModal({ item, orgs, onClose, onSaved }) {
                   <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Admin {i + 1}</span>
                   <button type="button" onClick={() => set('handlers', form.handlers.filter((_, idx) => idx !== i))} className="rounded-lg p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-500/10" title="Remove admin"><X className="h-4 w-4" /></button>
                 </div>
+                <div className="mb-2">
+                  <Select label="Link to a user account (pulls their live email, phone & LinkedIn)" value={h.user || ''} onChange={(e) => linkUser(i, e.target.value)}>
+                    <option value="">Not linked — enter details manually</option>
+                    {users.map((u) => <option key={u._id} value={u._id}>{u.name} · {u.email}</option>)}
+                  </Select>
+                </div>
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  <Input placeholder="Name" value={h.name} onChange={(e) => setHandler(i, 'name', e.target.value)} />
+                  <Input placeholder="Name" value={h.name} onChange={(e) => setHandler(i, 'name', e.target.value)} disabled={!!h.user} />
                   <Select value={h.role} onChange={(e) => setHandler(i, 'role', e.target.value)}>
                     <option value="">Role…</option>
                     <option value="Super Admin">Super Admin</option>
                     <option value="Content Admin">Content Admin</option>
                     <option value="Portfolio Admin">Portfolio Admin</option>
                   </Select>
-                  <Input type="email" placeholder="Email" value={h.email} onChange={(e) => setHandler(i, 'email', e.target.value)} />
-                  <Input placeholder="Phone" value={h.phone} onChange={(e) => setHandler(i, 'phone', e.target.value)} />
+                  <Input type="email" placeholder="Email" value={h.email} onChange={(e) => setHandler(i, 'email', e.target.value)} disabled={!!h.user} />
+                  <Input placeholder="Phone" value={h.phone} onChange={(e) => setHandler(i, 'phone', e.target.value)} disabled={!!h.user} />
                 </div>
+                {h.user && <p className="mt-1.5 text-[11px] text-emerald-600 dark:text-emerald-400">Linked — name, email & phone stay in sync with this user's account.</p>}
               </div>
             ))}
           </div>

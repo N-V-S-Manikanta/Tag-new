@@ -23,6 +23,10 @@ const userSchema = new mongoose.Schema(
     avatar: { type: String, default: '' },
     avatarPublicId: { type: String, default: '' },
     jobTitle: { type: String, default: '' },
+    // Contact details shown wherever this person appears (e.g. social handlers)
+    // so teammates can reach them directly.
+    phone: { type: String, default: '', trim: true },
+    linkedinUrl: { type: String, default: '', trim: true },
     // Skill set, e.g. ["Video Editing", "Photo Editing", "Photography"].
     skills: [{ type: String, trim: true }],
     isActive: { type: Boolean, default: true },

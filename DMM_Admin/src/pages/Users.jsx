@@ -183,6 +183,7 @@ function UserFormModal({ editUser, onClose, onSaved }) {
   const [form, setForm] = useState({
     name: editUser?.name || '', email: editUser?.email || '', password: '',
     role: editUser?.isSuperAdmin ? 'SUPER' : (editUser?.role || 'USER'), jobTitle: editUser?.jobTitle || '',
+    phone: editUser?.phone || '', linkedinUrl: editUser?.linkedinUrl || '',
     skills: (editUser?.skills || []).join(', '),
     organization: editUser?.organization?._id || editUser?.organization || '',
   });
@@ -199,7 +200,8 @@ function UserFormModal({ editUser, onClose, onSaved }) {
     try {
       const payload = {
         name: form.name, role: isSuper ? 'ADMIN' : form.role, isSuperAdmin: isSuper,
-        jobTitle: form.jobTitle, skills: form.skills,
+        jobTitle: form.jobTitle, phone: form.phone, linkedinUrl: form.linkedinUrl,
+        skills: form.skills,
         organization: needsOrg ? form.organization : null,
       };
       if (editUser) { await userApi.update(editUser._id, payload); toast.success('User updated'); }
@@ -220,6 +222,10 @@ function UserFormModal({ editUser, onClose, onSaved }) {
             {CREATE_ROLES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
           </Select>
           <Input label="Job title" value={form.jobTitle} onChange={(e) => setForm({ ...form, jobTitle: e.target.value })} placeholder="e.g. Manager" />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <Input label="Phone / contact number" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="+91 98765 43210" />
+          <Input label="LinkedIn profile URL" value={form.linkedinUrl} onChange={(e) => setForm({ ...form, linkedinUrl: e.target.value })} placeholder="https://linkedin.com/in/…" />
         </div>
         <Input label="Skill set (comma separated)" value={form.skills} onChange={(e) => setForm({ ...form, skills: e.target.value })} placeholder="e.g. Video Editing, Photo Editing, Photography" />
         {form.skills.trim() && (

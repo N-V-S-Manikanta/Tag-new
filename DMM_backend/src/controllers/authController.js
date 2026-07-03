@@ -13,6 +13,8 @@ const sanitize = (user) => ({
   isSuperAdmin: !!user.isSuperAdmin,
   avatar: user.avatar,
   jobTitle: user.jobTitle,
+  phone: user.phone || '',
+  linkedinUrl: user.linkedinUrl || '',
   settings: user.settings,
   // Populated org doc (CEO/USER) or null (ADMIN)
   organization: user.organization || null,

@@ -110,6 +110,14 @@ export const approvalApi = {
   remove: (id) => api.delete(`/approvals/${id}`).then((r) => r.data),
 };
 
+// ---- Events (Zolo event photos — folder links) ----
+export const eventApi = {
+  list: (params) => api.get('/events', { params }).then((r) => r.data),
+  create: (formData) => api.post('/events', formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data),
+  update: (id, formData) => api.put(`/events/${id}`, formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data),
+  remove: (id) => api.delete(`/events/${id}`).then((r) => r.data),
+};
+
 // ---- Notifications ----
 export const notificationApi = {
   list: (params) => api.get('/notifications', { params }).then((r) => r.data),

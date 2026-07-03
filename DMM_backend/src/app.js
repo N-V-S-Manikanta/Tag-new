@@ -24,6 +24,7 @@ import websiteRoutes from './routes/websiteRoutes.js';
 import organizationRoutes from './routes/organizationRoutes.js';
 import calendarRoutes from './routes/calendarRoutes.js';
 import metaRoutes from './routes/metaRoutes.js';
+import eventRoutes from './routes/eventRoutes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -68,6 +69,7 @@ app.use('/api/activity', activityRoutes);
 app.use('/api/search', searchRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/meta', metaRoutes);
+app.use('/api/events', eventRoutes);
 app.use('/api/competitors', competitorRoutes);
 app.use('/api/purchases', purchaseRoutes);
 app.use('/api/brand', brandAssetRoutes);

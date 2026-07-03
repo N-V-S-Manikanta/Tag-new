@@ -16,6 +16,7 @@ import Dashboard from './pages/Dashboard.jsx';
 import Templates from './pages/Templates.jsx';
 import Assets from './pages/Assets.jsx';
 import BrandLibrary from './pages/BrandLibrary.jsx';
+import Events from './pages/Events.jsx';
 import SocialHandlers from './pages/SocialHandlers.jsx';
 import PremiumPacks from './pages/PremiumPacks.jsx';
 import Approvals from './pages/Approvals.jsx';
@@ -75,6 +76,7 @@ export default function App() {
         <Route path="/templates" element={<Templates />} />
         <Route path="/assets" element={<Assets />} />
         <Route path="/brand-library" element={<BrandLibrary />} />
+        <Route path="/events" element={<Events />} />
         <Route path="/social-handlers" element={<SocialHandlers />} />
         <Route path="/premium-packs" element={<PremiumPacks />} />
         <Route path="/approvals" element={<Approvals />} />

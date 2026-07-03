@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Building2, Users, Activity, BarChart3, CalendarDays, Settings, X, ShieldCheck, CheckSquare, Images, Share2, ShoppingBag, Target, Globe } from 'lucide-react';
+import { LayoutDashboard, Building2, Users, Activity, BarChart3, CalendarDays, Settings, X, ShieldCheck, CheckSquare, Images, Share2, ShoppingBag, Target, Globe, Camera } from 'lucide-react';
 import { cn } from '../../lib/utils.js';
 
 const NAV = [
@@ -11,6 +11,7 @@ const NAV = [
   { to: '/social-accounts', label: 'Social Handlers', icon: Share2 },
   { to: '/websites', label: 'Websites', icon: Globe },
   { to: '/brand-library', label: 'Brand Library', icon: Images },
+  { to: '/events', label: 'Events', icon: Camera },
   { to: '/purchases', label: 'Premium Packs', icon: ShoppingBag },
   { to: '/goals', label: 'Yearly Goals', icon: Target },
   { to: '/calendar', label: 'Posting Calendar', icon: CalendarDays },

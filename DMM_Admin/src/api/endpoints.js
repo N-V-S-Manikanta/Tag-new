@@ -72,6 +72,14 @@ export const approvalApi = {
   remove: (id) => api.delete(`/approvals/${id}`).then((r) => r.data),
 };
 
+// Events — Zolo event photos (folder links). Shared across the workspace.
+export const eventApi = {
+  list: (params) => api.get('/events', { params }).then((r) => r.data),
+  create: (formData) => api.post('/events', formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data),
+  update: (id, formData) => api.put(`/events/${id}`, formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data),
+  remove: (id) => api.delete(`/events/${id}`).then((r) => r.data),
+};
+
 // Premium packs / purchases — org-scoped (active org via header).
 export const purchaseApi = {
   list: () => api.get('/purchases').then((r) => r.data),

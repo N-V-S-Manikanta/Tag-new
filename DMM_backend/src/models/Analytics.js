@@ -20,6 +20,7 @@ const analyticsSchema = new mongoose.Schema(
     organicFollowers: { type: Number, default: 0 }, // LinkedIn: organic follows
     sponsoredFollowers: { type: Number, default: 0 }, // LinkedIn: sponsored/paid follows
     subscribers: { type: Number, default: 0 }, // YouTube
+    videoCount: { type: Number, default: 0 }, // YouTube: total public videos
 
     // ---- Discovery / Reach ----
     impressions: { type: Number, default: 0 }, // post impressions

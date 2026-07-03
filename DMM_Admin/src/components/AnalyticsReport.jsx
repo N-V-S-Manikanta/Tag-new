@@ -6,7 +6,7 @@ import { ArrowUp, ArrowDown, Minus, TrendingUp } from 'lucide-react';
 import { Card, Skeleton, EmptyState } from './ui/primitives.jsx';
 import { cn, formatNumber } from '../lib/utils.js';
 
-const HIGHLIGHT_PRIORITY = ['followers', 'subscribers', 'impressions', 'engagementRate', 'newFollowers', 'reach', 'views', 'interactions', 'pageViews'];
+const HIGHLIGHT_PRIORITY = ['followers', 'subscribers', 'impressions', 'engagementRate', 'newFollowers', 'reach', 'views', 'videoCount', 'interactions', 'pageViews'];
 const fmt = (v, isPct) => (isPct ? `${Number(v || 0).toFixed(2)}%` : formatNumber(v || 0));
 const fmtDate = (d) => new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 

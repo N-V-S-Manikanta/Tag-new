@@ -19,9 +19,7 @@ export const PLATFORM_FIELDS = {
     Overview: ['followers', 'views', 'reach', 'interactions'],
   },
   YouTube: {
-    Audience: ['subscribers', 'newFollowers'],
-    Performance: ['views', 'watchHours', 'impressions'],
-    Engagement: ['engagementRate', 'comments'],
+    Overview: ['subscribers', 'views', 'videoCount', 'engagementRate', 'comments'],
   },
   Facebook: {
     Overview: ['followers', 'newFollowers', 'reach', 'views', 'interactions', 'visits', 'linkClicks'],
@@ -36,6 +34,7 @@ export const FIELD_LABELS = {
   organicFollowers: 'Organic Followers',
   sponsoredFollowers: 'Sponsored Followers',
   subscribers: 'Subscribers',
+  videoCount: 'Videos',
   impressions: 'Post Impressions',
   uniqueImpressions: 'Unique Impressions',
   reach: 'Reach',
@@ -127,7 +126,10 @@ export const getPlatformReport = asyncHandler(async (req, res) => {
   // date (so "this week" = the most recent 7 days, "last week" = the 7 before).
   // Counts (impressions, clicks, reactions…) are summed; follower-style totals
   // take the end-of-week value.
-  const STOCK_FIELDS = new Set(['followers', 'subscribers', 'profilesManaged', 'followersLast30Days']);
+  // On YouTube these are cumulative lifetime totals, so they take the end-of-week
+  // value (growth = delta) rather than being summed.
+  const STOCK_FIELDS = new Set(['followers', 'subscribers', 'profilesManaged', 'followersLast30Days',
+    ...(platform === 'YouTube' ? ['views', 'videoCount', 'comments'] : [])]);
   // Engagement rate is DERIVED from the period totals exactly like LinkedIn does
   // — engagements ÷ impressions over the whole period — not an average of each
   // day's percentage (which is mathematically wrong and drifts a few tenths).

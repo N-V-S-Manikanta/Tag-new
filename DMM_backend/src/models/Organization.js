@@ -29,6 +29,11 @@ const organizationSchema = new mongoose.Schema(
     metaInstagramId: { type: String, default: '' },
     metaInstagramUsername: { type: String, default: '' },
 
+    // YouTube channel mapping — the API key lives only in the backend env
+    // (YOUTUBE_API_KEY); we store just the channel id/title to pull public stats.
+    youtubeChannelId: { type: String, default: '' },
+    youtubeChannelTitle: { type: String, default: '' },
+
     isActive: { type: Boolean, default: true },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   },

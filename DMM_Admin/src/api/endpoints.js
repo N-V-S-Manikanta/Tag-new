@@ -51,6 +51,15 @@ export const metaApi = {
   sync: (organizationId, platform) => api.post('/meta/sync', { platform }, { params: { organizationId, platform } }).then((r) => r.data),
 };
 
+// YouTube live sync (Data API v3). The API key lives only in the backend env.
+export const youtubeApi = {
+  status: () => api.get('/youtube/status').then((r) => r.data),
+  channel: (organizationId) => api.get('/youtube/channel', { params: { organizationId } }).then((r) => r.data),
+  resolve: (q) => api.get('/youtube/resolve', { params: { q } }).then((r) => r.data),
+  map: (organizationId, query) => api.post('/youtube/map', { organizationId, query }).then((r) => r.data),
+  sync: (organizationId) => api.post('/youtube/sync', {}, { params: { organizationId } }).then((r) => r.data),
+};
+
 // Competitor benchmark — org-scoped (active org attached as x-organization-id).
 export const competitorApi = {
   list: (platform, organizationId) => api.get('/competitors', { params: { platform, organizationId } }).then((r) => r.data),

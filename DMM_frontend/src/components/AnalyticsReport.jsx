@@ -102,8 +102,11 @@ export default function AnalyticsReport({ report, isLoading }) {
               <YAxis tick={{ fontSize: 12, fill: '#94a3b8' }} axisLine={false} tickLine={false} tickFormatter={(v) => formatNumber(v)} />
               <Tooltip contentStyle={{ borderRadius: 12, fontSize: 13 }} labelFormatter={fmtDate} formatter={(v) => formatNumber(v)} cursor={{ fill: 'rgba(99,102,241,0.06)' }} />
               <Bar dataKey={activeBar} radius={[6, 6, 0, 0]} fill="#6366f1" name={labels[activeBar]}>
-                <LabelList dataKey={activeBar} position="top" formatter={(v) => (v ? formatNumber(v) : '')}
-                  style={{ fontSize: 10, fontWeight: 600, fill: '#64748b' }} />
+                {/* Per-bar counts only while they stay readable — dense series rely on the tooltip. */}
+                {series.length <= 45 && (
+                  <LabelList dataKey={activeBar} position="top" formatter={(v) => (v ? formatNumber(v) : '')}
+                    style={{ fontSize: 10, fontWeight: 600, fill: '#64748b' }} />
+                )}
               </Bar>
             </BarChart>
           </ResponsiveContainer>

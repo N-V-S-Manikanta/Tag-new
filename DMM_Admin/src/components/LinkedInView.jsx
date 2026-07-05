@@ -29,7 +29,10 @@ const RANGES = [
   { value: 7, label: 'Past 7 days' },
   { value: 14, label: 'Past 14 days' },
   { value: 28, label: 'Past 28 days' },
+  { value: 30, label: 'Past 30 days' },
   { value: 90, label: 'Past 90 days' },
+  { value: 180, label: 'Past 180 days' },
+  { value: 365, label: 'Past 365 days' },
 ];
 
 const fmtDate = (d) => new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
@@ -82,9 +85,10 @@ export default function LinkedInView({ orgId, canUpload = true }) {
           <select value={range} onChange={(e) => setRange(Number(e.target.value))} className="input-base h-9 w-auto py-1 text-sm font-semibold">
             {RANGES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
           </select>
-          {canUpload && <UploadButton orgId={orgId} onDone={refresh} />}
         </div>
       </Card>
+
+      {canUpload && <UploadZone orgId={orgId} onDone={refresh} />}
 
       {/* Section tabs — mirrors LinkedIn's analytics nav */}
       <div className="flex flex-wrap gap-1.5">
@@ -119,10 +123,11 @@ export default function LinkedInView({ orgId, canUpload = true }) {
   );
 }
 
-// ---- Upload ----
-function UploadButton({ orgId, onDone }) {
+// ---- Upload — drag & drop any LinkedIn export (or click to browse) ----
+function UploadZone({ orgId, onDone }) {
   const fileRef = useRef(null);
   const [result, setResult] = useState(null);
+  const [dragging, setDragging] = useState(false);
   const importMut = useMutation({
     mutationFn: async (files) => {
       const all = [];
@@ -140,18 +145,46 @@ function UploadButton({ orgId, onDone }) {
     },
     onError: (e) => toast.error(e.response?.data?.message || 'Import failed'),
   });
-  const pick = (e) => {
-    const files = [...(e.target.files || [])];
-    e.target.value = '';
-    if (files.length) importMut.mutate(files);
+  const handleFiles = (list) => {
+    const files = [...(list || [])].filter((f) => /\.(xlsx?|csv)$/i.test(f.name));
+    if (!files.length) { toast.error('Drop the .xls/.xlsx file exactly as LinkedIn downloaded it'); return; }
+    importMut.mutate(files);
   };
+  const pick = (e) => { handleFiles(e.target.files); e.target.value = ''; };
+  const onDrop = (e) => { e.preventDefault(); setDragging(false); handleFiles(e.dataTransfer.files); };
 
   return (
     <>
       <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" multiple className="hidden" onChange={pick} />
-      <Button size="sm" onClick={() => fileRef.current?.click()} loading={importMut.isPending} style={{ background: LI_BLUE }}>
-        <Upload className="h-4 w-4" /> Upload LinkedIn export
-      </Button>
+      <div
+        onClick={() => fileRef.current?.click()}
+        onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={onDrop}
+        className={cn(
+          'flex cursor-pointer flex-wrap items-center justify-between gap-3 rounded-2xl border-2 border-dashed px-5 py-4 transition-colors',
+          dragging
+            ? 'border-[#0A66C2] bg-[#0A66C2]/5'
+            : 'border-slate-200 bg-white hover:border-[#0A66C2]/50 dark:border-slate-700 dark:bg-slate-900'
+        )}>
+        <div className="flex items-center gap-3">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white" style={{ background: LI_BLUE }}>
+            <Upload className="h-5 w-5" />
+          </span>
+          <div>
+            <p className="text-sm font-bold text-slate-800 dark:text-white">
+              {dragging ? 'Drop the files to import' : 'Drag & drop your LinkedIn exports here — or click to browse'}
+            </p>
+            <p className="text-xs text-slate-400">
+              Content, Visitors, Followers or Competitors downloads (.xls/.xlsx), several at once. Upload up to 365 days —
+              the app automatically breaks it into Past 7 / 14 / 28 / 30 / 90 / 180 / 365-day views.
+            </p>
+          </div>
+        </div>
+        <Button size="sm" loading={importMut.isPending} style={{ background: LI_BLUE }} onClick={(e) => { e.stopPropagation(); fileRef.current?.click(); }}>
+          <Upload className="h-4 w-4" /> Choose files
+        </Button>
+      </div>
       {result && (
         <div className="fixed bottom-5 right-5 z-50 w-80 rounded-2xl border border-slate-200 bg-white p-4 shadow-2xl dark:border-slate-700 dark:bg-slate-900">
           <div className="mb-2 flex items-center justify-between">
@@ -406,7 +439,10 @@ function FollowersTab({ totals, deltas, latest, series, demographics, range }) {
               <YAxis tick={{ fontSize: 12, fill: '#94a3b8' }} axisLine={false} tickLine={false} width={40} />
               <Tooltip contentStyle={{ borderRadius: 12, fontSize: 13 }} />
               <Bar dataKey="newFollowers" radius={[5, 5, 0, 0]} fill={LI_BLUE} name="New followers">
-                <LabelList dataKey="newFollowers" position="top" formatter={(v) => (v ? formatNumber(v) : '')} style={{ fontSize: 10, fontWeight: 600, fill: '#64748b' }} />
+                {/* Per-bar labels only when they stay readable — long ranges rely on the tooltip. */}
+                {series.length <= 45 && (
+                  <LabelList dataKey="newFollowers" position="top" formatter={(v) => (v ? formatNumber(v) : '')} style={{ fontSize: 10, fontWeight: 600, fill: '#64748b' }} />
+                )}
               </Bar>
             </BarChart>
           </ResponsiveContainer>

@@ -149,14 +149,14 @@ export const getPlatformReport = asyncHandler(async (req, res) => {
   if (!PLATFORMS.includes(platform)) { res.status(400); throw new Error('Invalid platform'); }
 
   // Window length for the period comparison, matching LinkedIn's range presets
-  // (Past 7 / 14 / 28 / 90 days). Defaults to 7. "This period" = the most recent
-  // N days; "last period" = the N days before that.
-  const ALLOWED_RANGES = [7, 14, 28, 90];
+  // (Past 7 / 14 / 28 / 90 / 365 days, plus 30 and 180). Defaults to 7.
+  // "This period" = the most recent N days; "last period" = the N days before.
+  const ALLOWED_RANGES = [7, 14, 28, 30, 90, 180, 365];
   const rangeDays = ALLOWED_RANGES.includes(Number(req.query.range)) ? Number(req.query.range) : 7;
 
-  // Up to ~4 months of daily snapshots (or years of weekly) so imported daily
-  // exports render in full, not just the last couple of weeks.
-  const snapshots = await Analytics.find({ organization: orgId, platform }).sort({ date: -1 }).limit(120).lean();
+  // Enough daily snapshots for a full 365-day window PLUS its comparison
+  // period (and headroom), so a year-long LinkedIn export aggregates fully.
+  const snapshots = await Analytics.find({ organization: orgId, platform }).sort({ date: -1 }).limit(800).lean();
   const latest = snapshots[0] || null;
   // Week-over-week: compare the latest entry against the most recent entry that
   // is at least 7 days older (so daily uploads compare to ~the same day last

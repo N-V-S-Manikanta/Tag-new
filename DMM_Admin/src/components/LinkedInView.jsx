@@ -88,7 +88,7 @@ export default function LinkedInView({ orgId, canUpload = true }) {
         </div>
       </Card>
 
-      {canUpload && <UploadZone orgId={orgId} onDone={refresh} />}
+      {canUpload && <UploadZone orgId={orgId} onDone={refresh} dash={dash} report={report} />}
 
       {/* Section tabs — mirrors LinkedIn's analytics nav */}
       <div className="flex flex-wrap gap-1.5">
@@ -123,68 +123,56 @@ export default function LinkedInView({ orgId, canUpload = true }) {
   );
 }
 
-// ---- Upload — drag & drop any LinkedIn export (or click to browse) ----
-function UploadZone({ orgId, onDone }) {
-  const fileRef = useRef(null);
+// ---- Upload — one labelled slot per LinkedIn download, all in one place.
+// Sheets are still auto-detected server-side, so a file dropped on the "wrong"
+// slot imports correctly anyway; the slot is a guide + status indicator.
+const UPLOAD_SLOTS = [
+  {
+    key: 'content', label: 'Content', icon: Newspaper,
+    hint: 'Analytics → Content → Export',
+    detects: (s) => s.kind === 'posts' || (s.kind === 'daily metrics' && (s.fields || []).includes('impressions')),
+  },
+  {
+    key: 'followers', label: 'Followers', icon: Users,
+    hint: 'Analytics → Followers → Export',
+    detects: (s) => s.kind.startsWith('followers demographics') || (s.kind === 'daily metrics' && (s.fields || []).some((f) => ['followers', 'organicFollowers', 'sponsoredFollowers', 'newFollowers'].includes(f))),
+  },
+  {
+    key: 'visitors', label: 'Visitors', icon: Eye,
+    hint: 'Analytics → Visitors → Export',
+    detects: (s) => s.kind.startsWith('visitors demographics') || (s.kind === 'daily metrics' && (s.fields || []).some((f) => ['pageViews', 'uniqueVisitors', 'desktopPageViews', 'mobilePageViews'].includes(f))),
+  },
+  {
+    key: 'competitors', label: 'Competitors', icon: Trophy,
+    hint: 'Analytics → Competitors → Export',
+    detects: (s) => s.kind === 'competitors',
+  },
+];
+
+function UploadZone({ orgId, onDone, dash, report }) {
   const [result, setResult] = useState(null);
-  const [dragging, setDragging] = useState(false);
-  const importMut = useMutation({
-    mutationFn: async (files) => {
-      const all = [];
-      for (const f of files) {
-        const res = await linkedinApi.import(orgId, f);
-        all.push(res);
-      }
-      return all;
-    },
-    onSuccess: (all) => {
-      const sheets = all.flatMap((r) => r.sheets.filter((s) => s.kind !== 'skipped'));
-      toast.success(`Imported ${all.length} file${all.length > 1 ? 's' : ''} — ${sheets.reduce((a, s) => a + s.rows, 0)} rows across ${sheets.length} sheets`);
-      setResult(all);
-      onDone();
-    },
-    onError: (e) => toast.error(e.response?.data?.message || 'Import failed'),
-  });
-  const handleFiles = (list) => {
-    const files = [...(list || [])].filter((f) => /\.(xlsx?|csv)$/i.test(f.name));
-    if (!files.length) { toast.error('Drop the .xls/.xlsx file exactly as LinkedIn downloaded it'); return; }
-    importMut.mutate(files);
+
+  // What each slot already has, so the tiles show a live status tick.
+  const status = {
+    content: (dash?.posts?.length || 0) > 0 ? `${dash.posts.length} posts` : (report?.weekly?.current?.impressions > 0 ? 'metrics imported' : null),
+    followers: Object.keys(dash?.demographics?.followers || {}).length > 0 ? 'demographics imported' : (report?.latest?.followers > 0 ? 'metrics imported' : null),
+    visitors: Object.keys(dash?.demographics?.visitors || {}).length > 0 ? 'demographics imported' : (report?.weekly?.current?.pageViews > 0 ? 'metrics imported' : null),
+    competitors: (dash?.competitors?.length || 0) > 0 ? `${dash.competitors.length} pages` : null,
   };
-  const pick = (e) => { handleFiles(e.target.files); e.target.value = ''; };
-  const onDrop = (e) => { e.preventDefault(); setDragging(false); handleFiles(e.dataTransfer.files); };
 
   return (
-    <>
-      <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" multiple className="hidden" onChange={pick} />
-      <div
-        onClick={() => fileRef.current?.click()}
-        onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
-        onDragLeave={() => setDragging(false)}
-        onDrop={onDrop}
-        className={cn(
-          'flex cursor-pointer flex-wrap items-center justify-between gap-3 rounded-2xl border-2 border-dashed px-5 py-4 transition-colors',
-          dragging
-            ? 'border-[#0A66C2] bg-[#0A66C2]/5'
-            : 'border-slate-200 bg-white hover:border-[#0A66C2]/50 dark:border-slate-700 dark:bg-slate-900'
-        )}>
-        <div className="flex items-center gap-3">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white" style={{ background: LI_BLUE }}>
-            <Upload className="h-5 w-5" />
-          </span>
-          <div>
-            <p className="text-sm font-bold text-slate-800 dark:text-white">
-              {dragging ? 'Drop the files to import' : 'Drag & drop your LinkedIn exports here — or click to browse'}
-            </p>
-            <p className="text-xs text-slate-400">
-              Content, Visitors, Followers or Competitors downloads (.xls/.xlsx), several at once. Upload up to 365 days —
-              the app automatically breaks it into Past 7 / 14 / 28 / 30 / 90 / 180 / 365-day views.
-            </p>
-          </div>
-        </div>
-        <Button size="sm" loading={importMut.isPending} style={{ background: LI_BLUE }} onClick={(e) => { e.stopPropagation(); fileRef.current?.click(); }}>
-          <Upload className="h-4 w-4" /> Choose files
-        </Button>
+    <Card className="p-4">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm font-bold text-slate-800 dark:text-white">Upload your 4 LinkedIn exports</p>
+        <p className="text-xs text-slate-400">Up to 365 days per file — the app breaks it into Past 7 / 14 / 28 / 30 / 90 / 180 / 365-day views automatically.</p>
       </div>
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {UPLOAD_SLOTS.map((slot) => (
+          <UploadSlot key={slot.key} slot={slot} orgId={orgId} status={status[slot.key]}
+            onDone={(res) => { setResult(res); onDone(); }} />
+        ))}
+      </div>
+
       {result && (
         <div className="fixed bottom-5 right-5 z-50 w-80 rounded-2xl border border-slate-200 bg-white p-4 shadow-2xl dark:border-slate-700 dark:bg-slate-900">
           <div className="mb-2 flex items-center justify-between">
@@ -201,7 +189,70 @@ function UploadZone({ orgId, onDone }) {
           </div>
         </div>
       )}
-    </>
+    </Card>
+  );
+}
+
+function UploadSlot({ slot, orgId, status, onDone }) {
+  const fileRef = useRef(null);
+  const [dragging, setDragging] = useState(false);
+  const Icon = slot.icon;
+
+  const importMut = useMutation({
+    mutationFn: async (files) => {
+      const all = [];
+      for (const f of files) all.push(await linkedinApi.import(orgId, f));
+      return all;
+    },
+    onSuccess: (all) => {
+      const sheets = all.flatMap((r) => r.sheets.filter((s) => s.kind !== 'skipped'));
+      const rows = sheets.reduce((a, s) => a + s.rows, 0);
+      toast.success(`${slot.label}: imported ${rows} rows across ${sheets.length} sheet${sheets.length === 1 ? '' : 's'}`);
+      // Gentle heads-up when the file doesn't look like this slot's export —
+      // the data still lands in the right place either way.
+      if (sheets.length && !sheets.some(slot.detects)) {
+        toast(`That file looked like a different export — no problem, every sheet was routed automatically.`, { icon: 'ℹ️' });
+      }
+      onDone(all);
+    },
+    onError: (e) => toast.error(e.response?.data?.message || `${slot.label} import failed`),
+  });
+
+  const handleFiles = (list) => {
+    const files = [...(list || [])].filter((f) => /\.(xlsx?|csv)$/i.test(f.name));
+    if (!files.length) { toast.error('Upload the .xls/.xlsx file exactly as LinkedIn downloaded it'); return; }
+    importMut.mutate(files);
+  };
+
+  return (
+    <div
+      onClick={() => fileRef.current?.click()}
+      onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+      onDragLeave={() => setDragging(false)}
+      onDrop={(e) => { e.preventDefault(); setDragging(false); handleFiles(e.dataTransfer.files); }}
+      className={cn(
+        'group cursor-pointer rounded-xl border-2 border-dashed p-4 text-center transition-colors',
+        dragging ? 'border-[#0A66C2] bg-[#0A66C2]/5' : 'border-slate-200 hover:border-[#0A66C2]/50 dark:border-slate-700'
+      )}>
+      <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" multiple className="hidden"
+        onChange={(e) => { handleFiles(e.target.files); e.target.value = ''; }} />
+      <span className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-xl text-white" style={{ background: LI_BLUE }}>
+        {importMut.isPending
+          ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+          : <Icon className="h-5 w-5" />}
+      </span>
+      <p className="text-sm font-bold text-slate-800 dark:text-white">{slot.label}</p>
+      <p className="mt-0.5 text-[11px] text-slate-400">{slot.hint}</p>
+      {status ? (
+        <p className="mt-2 inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400">
+          <CheckCircle2 className="h-3 w-3" /> {status}
+        </p>
+      ) : (
+        <p className="mt-2 inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-400 group-hover:bg-[#0A66C2]/10 group-hover:text-[#0A66C2] dark:bg-slate-800">
+          <Upload className="h-3 w-3" /> drop file or click
+        </p>
+      )}
+    </div>
   );
 }
 

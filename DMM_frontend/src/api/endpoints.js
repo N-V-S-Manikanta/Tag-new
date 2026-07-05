@@ -49,7 +49,22 @@ export const libraryApi = {
   brand: (params) => api.get('/brand', { params }).then((r) => r.data),
   socialAccounts: (params) => api.get('/social-accounts', { params }).then((r) => r.data),
   purchases: () => api.get('/purchases').then((r) => r.data),
-  goal: (orgId) => api.get(`/organizations/${orgId}/goal`).then((r) => r.data),
+};
+
+// ---- Growth goals (per organization + platform, read-only here) ----
+export const goalApi = {
+  list: (organizationId) => api.get('/goals', { params: { organizationId } }).then((r) => r.data),
+};
+
+// ---- Post Planner — plan upcoming posts and submit the plan for approval ----
+export const planApi = {
+  list: (params) => api.get('/plans', { params }).then((r) => r.data),
+  get: (id) => api.get(`/plans/${id}`).then((r) => r.data),
+  create: (data) => api.post('/plans', data).then((r) => r.data),
+  update: (id, data) => api.put(`/plans/${id}`, data).then((r) => r.data),
+  approve: (id) => api.put(`/plans/${id}/approve`).then((r) => r.data),
+  reject: (id, feedback) => api.put(`/plans/${id}/reject`, { feedback }).then((r) => r.data),
+  remove: (id) => api.delete(`/plans/${id}`).then((r) => r.data),
 };
 
 // ---- Dashboard ----

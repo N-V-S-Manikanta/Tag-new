@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import {
-  Bell, CheckCheck, Check, XCircle, RefreshCw, Send, FileText, Trash2,
+  Bell, CheckCheck, Check, XCircle, RefreshCw, Send, FileText, Trash2, ClipboardList,
 } from 'lucide-react';
 import { notificationApi } from '../api/endpoints.js';
 import PageHeader from '../components/layout/PageHeader.jsx';
@@ -16,6 +16,10 @@ const ICONS = {
   CONTENT_POSTED: { icon: Send, color: 'text-violet-600 bg-violet-50 dark:bg-violet-500/10' },
   NEW_REQUEST: { icon: FileText, color: 'text-brand-600 bg-brand-50 dark:bg-brand-500/10' },
   CONTENT_RESUBMITTED: { icon: RefreshCw, color: 'text-sky-600 bg-sky-50 dark:bg-sky-500/10' },
+  PLAN_SUBMITTED: { icon: ClipboardList, color: 'text-brand-600 bg-brand-50 dark:bg-brand-500/10' },
+  PLAN_APPROVED: { icon: Check, color: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-500/10' },
+  PLAN_REJECTED: { icon: XCircle, color: 'text-rose-600 bg-rose-50 dark:bg-rose-500/10' },
+  PLAN_RESUBMITTED: { icon: RefreshCw, color: 'text-sky-600 bg-sky-50 dark:bg-sky-500/10' },
 };
 
 export default function Notifications() {

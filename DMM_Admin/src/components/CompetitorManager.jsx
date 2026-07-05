@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell } from 'recharts';
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell, LabelList } from 'recharts';
 import { Users, Plus, Pencil, Trash2, X, Save, Upload, Download, FileSpreadsheet } from 'lucide-react';
 import { competitorApi } from '../api/endpoints.js';
 import { Button } from './ui/Button.jsx';
@@ -161,13 +161,15 @@ export default function CompetitorManager({ orgId, platform }) {
             <Card className="p-5">
               <h3 className="mb-4 font-bold text-slate-800 dark:text-white">Followers — you vs. competitors ({platform})</h3>
               <ResponsiveContainer width="100%" height={Math.max(200, chartData.length * 46)}>
-                <BarChart data={chartData} layout="vertical" margin={{ left: 20, right: 24 }}>
+                <BarChart data={chartData} layout="vertical" margin={{ left: 20, right: 72 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" horizontal={false} />
                   <XAxis type="number" tick={{ fontSize: 12, fill: '#94a3b8' }} axisLine={false} tickLine={false} tickFormatter={(v) => formatNumber(v)} />
                   <YAxis type="category" dataKey="name" width={130} tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} />
                   <Tooltip contentStyle={{ borderRadius: 12, fontSize: 13 }} formatter={(v) => formatNumber(v)} cursor={{ fill: 'rgba(124,58,237,0.06)' }} />
                   <Bar dataKey="value" radius={[0, 6, 6, 0]} name="Followers">
                     {chartData.map((d, i) => <Cell key={i} fill={d.self ? '#7c3aed' : d.color} />)}
+                    <LabelList dataKey="value" position="right" formatter={(v) => formatNumber(v)}
+                      style={{ fontSize: 12, fontWeight: 700, fill: '#475569' }} />
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>

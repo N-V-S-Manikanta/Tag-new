@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard, FileImage, Images, CheckSquare, BarChart3, CalendarDays,
-  FileText, Bell, Settings, X, TrendingUp, Palette, Share2, ShoppingBag, Camera,
+  FileText, Bell, Settings, X, TrendingUp, Palette, Share2, ShoppingBag, Camera, ClipboardList,
 } from 'lucide-react';
 import { cn, roleLabel } from '../../lib/utils.js';
 import { useAuthStore } from '../../store/authStore.js';
@@ -13,6 +13,7 @@ const MAIN_NAV = [
   { to: '/brand-library', label: 'Brand Library', icon: Palette },
   { to: '/events', label: 'Events', icon: Camera },
   { to: '/approvals', label: 'Approvals', icon: CheckSquare },
+  { to: '/planner', label: 'Post Planner', icon: ClipboardList },
   // Management info — only useful to the org head (CEO), hidden from regular users.
   { to: '/social-handlers', label: 'Social Handlers', icon: Share2, roles: ['CEO'] },
   { to: '/premium-packs', label: 'Premium Packs', icon: ShoppingBag, roles: ['CEO'] },

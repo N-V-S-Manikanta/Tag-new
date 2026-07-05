@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import {
-  ResponsiveContainer, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, LabelList,
 } from 'recharts';
 import { ArrowUp, ArrowDown, Minus, TrendingUp } from 'lucide-react';
 import { Card, Skeleton, EmptyState } from './ui/primitives.jsx';
@@ -96,12 +96,15 @@ export default function AnalyticsReport({ report, isLoading }) {
             </select>
           </div>
           <ResponsiveContainer width="100%" height={240}>
-            <BarChart data={series} margin={{ left: -12, right: 8, top: 8 }}>
+            <BarChart data={series} margin={{ left: -12, right: 8, top: 20 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
               <XAxis dataKey="date" tickFormatter={fmtDate} tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} minTickGap={20} />
               <YAxis tick={{ fontSize: 12, fill: '#94a3b8' }} axisLine={false} tickLine={false} tickFormatter={(v) => formatNumber(v)} />
               <Tooltip contentStyle={{ borderRadius: 12, fontSize: 13 }} labelFormatter={fmtDate} formatter={(v) => formatNumber(v)} cursor={{ fill: 'rgba(99,102,241,0.06)' }} />
-              <Bar dataKey={activeBar} radius={[6, 6, 0, 0]} fill="#6366f1" name={labels[activeBar]} />
+              <Bar dataKey={activeBar} radius={[6, 6, 0, 0]} fill="#6366f1" name={labels[activeBar]}>
+                <LabelList dataKey={activeBar} position="top" formatter={(v) => (v ? formatNumber(v) : '')}
+                  style={{ fontSize: 10, fontWeight: 600, fill: '#64748b' }} />
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
         </Card>

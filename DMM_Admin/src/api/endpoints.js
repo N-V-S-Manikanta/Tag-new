@@ -14,8 +14,22 @@ export const organizationApi = {
   update: (id, formData) =>
     api.put(`/organizations/${id}`, formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data),
   remove: (id) => api.delete(`/organizations/${id}`).then((r) => r.data),
-  goal: (id) => api.get(`/organizations/${id}/goal`).then((r) => r.data),
-  setGoal: (id, goal) => api.put(`/organizations/${id}`, { goal }).then((r) => r.data),
+};
+
+// Growth goals — one goal per organization + platform for a chosen period.
+export const goalApi = {
+  list: (organizationId) => api.get('/goals', { params: { organizationId } }).then((r) => r.data),
+  set: (data) => api.post('/goals', data).then((r) => r.data),
+  remove: (id) => api.delete(`/goals/${id}`).then((r) => r.data),
+};
+
+// Post plans — users plan their upcoming posts and submit the plan for approval.
+export const planApi = {
+  list: (params) => api.get('/plans', { params }).then((r) => r.data),
+  get: (id) => api.get(`/plans/${id}`).then((r) => r.data),
+  approve: (id) => api.put(`/plans/${id}/approve`).then((r) => r.data),
+  reject: (id, feedback) => api.put(`/plans/${id}/reject`, { feedback }).then((r) => r.data),
+  remove: (id) => api.delete(`/plans/${id}`).then((r) => r.data),
 };
 
 export const userApi = {

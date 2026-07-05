@@ -151,8 +151,17 @@ export const getPlatformReport = asyncHandler(async (req, res) => {
   // Window length for the period comparison, matching LinkedIn's range presets
   // (Past 7 / 14 / 28 / 90 / 365 days, plus 30 and 180). Defaults to 7.
   // "This period" = the most recent N days; "last period" = the N days before.
-  const ALLOWED_RANGES = [7, 14, 28, 30, 90, 180, 365];
-  const rangeDays = ALLOWED_RANGES.includes(Number(req.query.range)) ? Number(req.query.range) : 7;
+  const ALLOWED_RANGES = [7, 14, 15, 28, 30, 90, 180, 365];
+  let rangeDays = ALLOWED_RANGES.includes(Number(req.query.range)) ? Number(req.query.range) : 7;
+
+  // Custom window (LinkedIn's "Custom" range picker): explicit ?from=YYYY-MM-DD
+  // &to=YYYY-MM-DD. Overrides the preset — the window is exactly [from, to] and
+  // the previous period is the same number of days immediately before it.
+  const parseQDate = (s) => { const d = s ? new Date(`${String(s).slice(0, 10)}T00:00:00Z`) : null; return d && !isNaN(d) ? d : null; };
+  const customFrom = parseQDate(req.query.from);
+  const customTo = parseQDate(req.query.to);
+  const hasCustom = !!(customFrom && customTo && customTo >= customFrom);
+  if (hasCustom) rangeDays = Math.min(730, Math.round((customTo - customFrom) / 86400000) + 1);
 
   // Optional ?anchor=<field>: end the range window at the latest snapshot where
   // that field has data. LinkedIn's exports end on different dates per tab
@@ -241,7 +250,9 @@ export const getPlatformReport = asyncHandler(async (req, res) => {
   if (latest) {
     const asc = [...snapshots].reverse(); // oldest → newest
     let anchorSnap = latest;
-    if (anchorField) {
+    if (hasCustom) {
+      anchorSnap = { date: customTo }; // window ends exactly on the chosen date
+    } else if (anchorField) {
       const hit = snapshots.find((s) => (s[anchorField] || 0) > 0); // snapshots are newest-first
       if (hit) anchorSnap = hit;
     }

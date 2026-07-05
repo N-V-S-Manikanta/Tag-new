@@ -25,14 +25,13 @@ const TABS = [
   { key: 'leads', label: 'Leads', icon: Magnet },
 ];
 
+// Same presets as LinkedIn's own range picker.
 const RANGES = [
-  { value: 7, label: 'Past 7 days' },
-  { value: 14, label: 'Past 14 days' },
-  { value: 28, label: 'Past 28 days' },
-  { value: 30, label: 'Past 30 days' },
-  { value: 90, label: 'Past 90 days' },
-  { value: 180, label: 'Past 180 days' },
-  { value: 365, label: 'Past 365 days' },
+  { value: 15, label: 'Last 15 days' },
+  { value: 30, label: 'Last 30 days' },
+  { value: 90, label: 'Last 90 days' },
+  { value: 365, label: 'Last 365 days' },
+  { value: 'custom', label: 'Custom' },
 ];
 
 const fmtDate = (d) => new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
@@ -56,13 +55,26 @@ const TAB_ANCHOR = {
 export default function LinkedInView({ orgId, canUpload = true }) {
   const qc = useQueryClient();
   const [tab, setTab] = useState('content');
-  const [range, setRange] = useState(28);
+  const [preset, setPreset] = useState(30); // 15 | 30 | 90 | 365 | 'custom'
+  const [custom, setCustom] = useState({ from: '', to: '' });
 
+  const isCustom = preset === 'custom';
+  const customReady = isCustom && custom.from && custom.to && custom.from <= custom.to;
   const anchor = TAB_ANCHOR[tab] || 'impressions';
   const { data: report, isLoading: repLoading } = useQuery({
-    queryKey: ['report', orgId, 'LinkedIn', range, anchor],
-    queryFn: () => analyticsApi.report('LinkedIn', orgId, range, anchor),
+    queryKey: ['report', orgId, 'LinkedIn', preset, anchor, customReady ? custom.from : '', customReady ? custom.to : ''],
+    queryFn: () => analyticsApi.report(
+      'LinkedIn', orgId,
+      isCustom ? undefined : preset,
+      anchor,
+      customReady ? custom.from : undefined,
+      customReady ? custom.to : undefined
+    ),
+    enabled: !isCustom || customReady, // wait until both custom dates are picked
   });
+  // Days covered by the active window (custom spans included) — used for the
+  // "· Nd" suffix on cards and for clipping the charts.
+  const range = report?.weekly?.rangeDays || (isCustom ? 0 : preset);
   const { data: dash, isLoading: dashLoading } = useQuery({
     queryKey: ['linkedin-dash', orgId],
     queryFn: () => linkedinApi.dashboard(orgId),
@@ -99,11 +111,30 @@ export default function LinkedInView({ orgId, canUpload = true }) {
           <span className="text-sm font-bold text-slate-700 dark:text-slate-200">LinkedIn analytics</span>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <select value={range} onChange={(e) => setRange(Number(e.target.value))} className="input-base h-9 w-auto py-1 text-sm font-semibold">
+          {isCustom && (
+            <div className="flex items-center gap-1.5">
+              <input type="date" value={custom.from} max={custom.to || undefined}
+                onChange={(e) => setCustom((c) => ({ ...c, from: e.target.value }))}
+                className="input-base h-9 w-auto py-1 text-sm" title="Start date" />
+              <span className="text-xs font-semibold text-slate-400">→</span>
+              <input type="date" value={custom.to} min={custom.from || undefined}
+                onChange={(e) => setCustom((c) => ({ ...c, to: e.target.value }))}
+                className="input-base h-9 w-auto py-1 text-sm" title="End date" />
+            </div>
+          )}
+          <select value={preset}
+            onChange={(e) => setPreset(e.target.value === 'custom' ? 'custom' : Number(e.target.value))}
+            className="input-base h-9 w-auto py-1 text-sm font-semibold">
             {RANGES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
           </select>
         </div>
       </Card>
+
+      {isCustom && !customReady && (
+        <p className="rounded-xl bg-slate-50 px-4 py-2.5 text-sm text-slate-400 dark:bg-slate-800/40">
+          Pick a start and end date above to load the custom range.
+        </p>
+      )}
 
       {canUpload && <UploadZone orgId={orgId} onDone={refresh} dash={dash} report={report} />}
 
@@ -121,7 +152,7 @@ export default function LinkedInView({ orgId, canUpload = true }) {
         ))}
       </div>
 
-      {isLoading ? (
+      {isCustom && !customReady ? null : isLoading ? (
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-28" />)}</div>
           <Skeleton className="h-80" />

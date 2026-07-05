@@ -30,7 +30,7 @@ export const userApi = {
 // Social analytics — auto-scoped to the logged-in user's organization.
 export const analyticsApi = {
   get: (organizationId) => api.get('/analytics', { params: { organizationId } }).then((r) => r.data),
-  report: (platform, organizationId, range, anchor) => api.get(`/analytics/${platform}/report`, { params: { organizationId, range, anchor } }).then((r) => r.data),
+  report: (platform, organizationId, range, anchor, from, to) => api.get(`/analytics/${platform}/report`, { params: { organizationId, range, anchor, from, to } }).then((r) => r.data),
   history: (platform, organizationId) => api.get(`/analytics/${platform}/history`, { params: { organizationId } }).then((r) => r.data),
 };
 

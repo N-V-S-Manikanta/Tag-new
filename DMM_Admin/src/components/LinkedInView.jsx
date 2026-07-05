@@ -162,7 +162,7 @@ export default function LinkedInView({ orgId, canUpload = true }) {
         <>
           {tab === 'content' && <ContentTab totals={totals} deltas={deltas} series={series} posts={dash?.posts || []} range={range} hasData={report?.hasData} />}
           {tab === 'visitors' && <VisitorsTab totals={totals} deltas={deltas} series={series} demographics={dash?.demographics?.visitors || {}} range={range} />}
-          {tab === 'followers' && <FollowersTab totals={totals} deltas={deltas} latest={latest} series={series} demographics={dash?.demographics?.followers || {}} range={range} />}
+          {tab === 'followers' && <FollowersTab totals={totals} deltas={deltas} latest={latest} series={series} demographics={dash?.demographics?.followers || {}} range={range} orgId={orgId} canUpload={canUpload} onSynced={refresh} />}
           {tab === 'competitors' && <CompetitorsTab competitors={dash?.competitors || []} latest={{ ...latest, ...totals }} />}
           {tab === 'search' && <SimpleMetricTab title="Search appearances" description="How often the page appeared in LinkedIn search results." field="searchAppearances" totals={totals} deltas={deltas} series={series} range={range} />}
           {tab === 'leads' && <LeadsTab totals={totals} deltas={deltas} series={series} range={range} />}
@@ -532,13 +532,15 @@ function VisitorsTab({ totals, deltas, series, demographics, range }) {
 }
 
 // ---- Followers ----
-function FollowersTab({ totals, deltas, latest, series, demographics, range }) {
+function FollowersTab({ totals, deltas, latest, series, demographics, range, orgId, canUpload, onSynced }) {
+  const currentTotal = totals.followers || latest.followers || 0;
   return (
     <div className="space-y-5">
+      {canUpload && <BaselineSync orgId={orgId} currentTotal={currentTotal} onSynced={onSynced} />}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {/* totals.followers is the end-of-window snapshot from the followers-
             anchored bucket — the overall latest day may not carry follower data. */}
-        <MetricCard label="Total followers" value={totals.followers || latest.followers} delta={deltas.followers} />
+        <MetricCard label="Total followers" value={currentTotal} delta={deltas.followers} />
         <MetricCard label="New followers" suffix={`${range}d`} value={totals.newFollowers} delta={deltas.newFollowers} />
         <MetricCard label="Organic followers" suffix={`${range}d`} value={totals.organicFollowers} delta={deltas.organicFollowers} />
         <MetricCard label="Sponsored followers" suffix={`${range}d`} value={totals.sponsoredFollowers} delta={deltas.sponsoredFollowers} />
@@ -570,6 +572,51 @@ function FollowersTab({ totals, deltas, latest, series, demographics, range }) {
         <h3 className="mb-4 font-bold text-slate-800 dark:text-white">Total followers</h3>
         <TrendChart series={series} field="followers" label="Total followers" height={220} />
       </Card>
+    </div>
+  );
+}
+
+// LinkedIn's Followers export only contains daily GAINS — the page-header total
+// never appears in any file. The admin types it once; the backend rebuilds the
+// whole followers history backwards from the gains, and every weekly upload
+// rolls it forward automatically after that.
+function BaselineSync({ orgId, currentTotal, onSynced }) {
+  const [value, setValue] = useState('');
+  const [open, setOpen] = useState(!currentTotal);
+  const syncMut = useMutation({
+    mutationFn: () => linkedinApi.followersBaseline(orgId, Number(value)),
+    onSuccess: (res) => {
+      toast.success(`Total followers synced to ${formatNumber(res.latestTotal)} — history rebuilt (${res.updated} days)`);
+      setValue(''); setOpen(false); onSynced();
+    },
+    onError: (e) => toast.error(e.response?.data?.message || 'Sync failed'),
+  });
+
+  if (!open) {
+    return (
+      <p className="text-xs text-slate-400">
+        Total doesn’t match your LinkedIn page header?{' '}
+        <button onClick={() => setOpen(true)} className="font-semibold text-[#0A66C2] hover:underline">Sync total followers</button>
+      </p>
+    );
+  }
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border-2 border-dashed border-[#0A66C2]/40 bg-[#0A66C2]/5 px-5 py-4">
+      <div className="min-w-0">
+        <p className="text-sm font-bold text-slate-800 dark:text-white">Sync your total followers once</p>
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          LinkedIn’s export only contains daily gains — enter the <span className="font-semibold">Total followers</span> shown on your
+          LinkedIn page header (e.g. 11,172). The history is rebuilt from the gains and weekly uploads keep it updated automatically.
+        </p>
+      </div>
+      <form className="flex items-center gap-2" onSubmit={(e) => { e.preventDefault(); syncMut.mutate(); }}>
+        <input type="number" min="1" value={value} onChange={(e) => setValue(e.target.value)}
+          placeholder="e.g. 11172" className="input-base h-10 w-36" />
+        <Button size="sm" type="submit" disabled={!Number(value)} loading={syncMut.isPending} style={{ background: LI_BLUE }}>
+          <CheckCircle2 className="h-4 w-4" /> Sync
+        </Button>
+        {currentTotal > 0 && <Button size="sm" type="button" variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>}
+      </form>
     </div>
   );
 }

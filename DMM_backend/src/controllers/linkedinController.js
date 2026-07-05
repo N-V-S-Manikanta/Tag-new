@@ -269,6 +269,35 @@ export const importLinkedIn = asyncHandler(async (req, res) => {
   res.json({ success: true, file: req.file.originalname, sheets: summary });
 });
 
+// @route POST /api/linkedin/followers-baseline  (ADMIN/CEO) — LinkedIn's
+// Followers export only contains daily GAINS, never the audience total shown
+// on the page header. The admin enters that total once; the whole followers
+// history is rebuilt backwards from the gains (total on day d-1 = total on
+// day d minus day d's gains), and future weekly imports roll it forward.
+export const setFollowersBaseline = asyncHandler(async (req, res) => {
+  const orgId = requireOrgId(req, res);
+  const total = Number(req.body.total);
+  if (!Number.isFinite(total) || total <= 0) { res.status(400); throw new Error('Enter the total followers shown on your LinkedIn page'); }
+
+  const snaps = await Analytics.find({ organization: orgId, platform: 'LinkedIn' }).sort({ date: 1 }).select('newFollowers').lean();
+  if (!snaps.length) { res.status(400); throw new Error('Upload the LinkedIn Followers export first, then sync the total'); }
+
+  let running = total;
+  const ops = [];
+  for (let i = snaps.length - 1; i >= 0; i--) {
+    ops.push({ updateOne: { filter: { _id: snaps[i]._id }, update: { $set: { followers: Math.max(0, Math.round(running)) } } } });
+    running -= snaps[i].newFollowers || 0;
+  }
+  await Analytics.bulkWrite(ops);
+
+  logActivity({
+    user: req.user._id, organization: orgId, action: ACTIVITY_ACTIONS.ANALYTICS_UPDATED,
+    description: `Synced LinkedIn total followers to ${total} and rebuilt the followers history (${ops.length} days)`,
+    entityType: 'Analytics',
+  });
+  res.json({ success: true, updated: ops.length, latestTotal: total });
+});
+
 // @route GET /api/linkedin/dashboard?organizationId=&days=
 // Everything the LinkedIn-style view needs beyond the daily report: the post
 // performance table, follower/visitor demographics, and competitors.

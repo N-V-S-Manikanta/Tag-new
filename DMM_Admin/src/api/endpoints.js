@@ -60,6 +60,7 @@ export const analyticsApi = {
 // Visitors, Followers, Competitors); sheets are auto-detected server-side.
 export const linkedinApi = {
   dashboard: (organizationId, days) => api.get('/linkedin/dashboard', { params: { organizationId, days } }).then((r) => r.data),
+  followersBaseline: (organizationId, total) => api.post('/linkedin/followers-baseline', { total }, { params: { organizationId } }).then((r) => r.data),
   import: (organizationId, file) => {
     const fd = new FormData();
     fd.append('file', file);

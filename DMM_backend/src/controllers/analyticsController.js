@@ -486,17 +486,50 @@ export const ingestDailyGrid = async (grid, orgId, platform) => {
   }
   if (!map) return null;
 
+  // Parse the data rows first (oldest → newest) so cumulative followers can
+  // roll forward regardless of the sheet's row order.
+  const parsed = [];
+  for (let i = headerRow + 1; i < grid.length; i++) {
+    const row = grid[i] || [];
+    const date = parseDateCell(row[map.date]);
+    if (date) parsed.push({ date, row });
+  }
+  parsed.sort((a, b) => a.date - b.date);
+
+  // LinkedIn QUIRK: in the Followers export, the column named "Total followers"
+  // is NOT the audience size — it's that day's gains (organic + sponsored).
+  // Detect that shape (total == organic + sponsored on nearly every row) and
+  // treat the column as newFollowers instead, so the audience total never gets
+  // overwritten with a day's gain count.
+  let gainsStyleFollowers = false;
+  if (map.followers != null && (map.organicFollowers != null || map.sponsoredFollowers != null) && map.newFollowers == null) {
+    let checked = 0;
+    let matches = 0;
+    for (const { row } of parsed.slice(0, 40)) {
+      const tot = cellNumber(row[map.followers]);
+      const sum = (map.organicFollowers != null ? cellNumber(row[map.organicFollowers]) : 0)
+        + (map.sponsoredFollowers != null ? cellNumber(row[map.sponsoredFollowers]) : 0);
+      checked += 1;
+      if (tot === sum) matches += 1;
+    }
+    // Even one row decides it: a page's cumulative total coincidentally
+    // equalling that same day's organic+sponsored gains is practically
+    // impossible, and short weekly exports must be detected too.
+    if (checked >= 1 && matches / checked >= 0.8) {
+      map.newFollowers = map.followers;
+      delete map.followers;
+      gainsStyleFollowers = true;
+    }
+  }
+
   const metricFields = Object.keys(map).filter((f) => f !== 'date');
   let created = 0;
   let updated = 0;
   let minDate = null;
   let maxDate = null;
+  let runningFollowers = null; // cumulative roll-forward for gains-style imports
 
-  for (let i = headerRow + 1; i < grid.length; i++) {
-    const row = grid[i] || [];
-    const date = parseDateCell(row[map.date]);
-    if (!date) continue;
-
+  for (const { date, row } of parsed) {
     const dayEnd = new Date(date.getTime() + 86400000);
     let snap = await Analytics.findOne({ organization: orgId, platform, date: { $gte: date, $lt: dayEnd } });
     const isNew = !snap;
@@ -512,6 +545,23 @@ export const ingestDailyGrid = async (grid, orgId, platform) => {
     // the organic + sponsored gains. Derive it so follower-gain charts work.
     if (map.newFollowers == null && (map.organicFollowers != null || map.sponsoredFollowers != null)) {
       snap.newFollowers = (snap.organicFollowers || 0) + (snap.sponsoredFollowers || 0);
+    }
+    // Gains-style import: the export never carries the audience total, so roll
+    // it forward from the last known cumulative value (set once via the
+    // followers-baseline sync). Without a baseline it stays 0 until synced.
+    if (gainsStyleFollowers) {
+      if (runningFollowers === null) {
+        const prevSnap = await Analytics.findOne({
+          organization: orgId, platform, date: { $lt: parsed[0].date }, followers: { $gt: 0 },
+        }).sort({ date: -1 }).lean();
+        runningFollowers = prevSnap?.followers || 0;
+      }
+      if (runningFollowers > 0) {
+        runningFollowers += snap.newFollowers || 0;
+        snap.followers = runningFollowers;
+      } else {
+        snap.followers = 0; // unknown until the baseline sync — never a gain count
+      }
     }
     await snap.save();
 

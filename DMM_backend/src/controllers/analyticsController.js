@@ -154,6 +154,13 @@ export const getPlatformReport = asyncHandler(async (req, res) => {
   const ALLOWED_RANGES = [7, 14, 28, 30, 90, 180, 365];
   const rangeDays = ALLOWED_RANGES.includes(Number(req.query.range)) ? Number(req.query.range) : 7;
 
+  // Optional ?anchor=<field>: end the range window at the latest snapshot where
+  // that field has data. LinkedIn's exports end on different dates per tab
+  // (visitor data lags content by a day or two), so anchoring each tab on its
+  // own metric makes the totals match LinkedIn's UI exactly instead of a
+  // boundary day slipping out of the window.
+  const anchorField = FIELD_LABELS[req.query.anchor] ? String(req.query.anchor) : null;
+
   // Enough daily snapshots for a full 365-day window PLUS its comparison
   // period (and headroom), so a year-long LinkedIn export aggregates fully.
   const snapshots = await Analytics.find({ organization: orgId, platform }).sort({ date: -1 }).limit(800).lean();
@@ -233,7 +240,12 @@ export const getPlatformReport = asyncHandler(async (req, res) => {
   let weekly = null;
   if (latest) {
     const asc = [...snapshots].reverse(); // oldest → newest
-    const latestTime = new Date(latest.date).getTime();
+    let anchorSnap = latest;
+    if (anchorField) {
+      const hit = snapshots.find((s) => (s[anchorField] || 0) > 0); // snapshots are newest-first
+      if (hit) anchorSnap = hit;
+    }
+    const latestTime = new Date(anchorSnap.date).getTime();
     const windowMs = rangeDays * 24 * 60 * 60 * 1000;
     const buckets = new Map(); // periodIndex (0 = most recent N days) → rows
     for (const s of asc) {
@@ -253,6 +265,7 @@ export const getPlatformReport = asyncHandler(async (req, res) => {
       .map(([, rows]) => ({ ...rangeOf(rows), ...aggregateWeek(rows) }));
     weekly = {
       rangeDays,
+      anchorDate: anchorSnap.date,
       current: curAgg,
       previous: prevAgg,
       currentRange: rangeOf(cur),
@@ -475,6 +488,11 @@ export const ingestDailyGrid = async (grid, orgId, platform) => {
       // LinkedIn exports rates as fractions (0.0699 = 6.99%). Store as percent.
       if (PERCENT_IMPORT.has(field) && val > 0 && val <= 1) val = +(val * 100).toFixed(2);
       snap[field] = val;
+    }
+    // LinkedIn's Followers export has no "New followers" column — its UI sums
+    // the organic + sponsored gains. Derive it so follower-gain charts work.
+    if (map.newFollowers == null && (map.organicFollowers != null || map.sponsoredFollowers != null)) {
+      snap.newFollowers = (snap.organicFollowers || 0) + (snap.sponsoredFollowers || 0);
     }
     await snap.save();
 

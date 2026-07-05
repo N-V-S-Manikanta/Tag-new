@@ -41,14 +41,27 @@ const fmt = (v, isPct) => (isPct ? `${Number(v || 0).toFixed(2)}%` : formatNumbe
 // LinkedIn-style analytics for one organization: fed by uploading LinkedIn's
 // own export files (Content / Visitors / Followers / Competitors) and laid out
 // to mirror the sections of LinkedIn page analytics.
+// LinkedIn's exports end on different dates per tab (visitor data lags content
+// by a day or two), so each tab's window is anchored on its own headline metric
+// — same as LinkedIn's UI — to make the totals match exactly.
+const TAB_ANCHOR = {
+  content: 'impressions',
+  visitors: 'pageViews',
+  followers: 'followers',
+  competitors: 'followers',
+  search: 'searchAppearances',
+  leads: 'leads',
+};
+
 export default function LinkedInView({ orgId, canUpload = true }) {
   const qc = useQueryClient();
   const [tab, setTab] = useState('content');
   const [range, setRange] = useState(28);
 
+  const anchor = TAB_ANCHOR[tab] || 'impressions';
   const { data: report, isLoading: repLoading } = useQuery({
-    queryKey: ['report', orgId, 'LinkedIn', range],
-    queryFn: () => analyticsApi.report('LinkedIn', orgId, range),
+    queryKey: ['report', orgId, 'LinkedIn', range, anchor],
+    queryFn: () => analyticsApi.report('LinkedIn', orgId, range, anchor),
   });
   const { data: dash, isLoading: dashLoading } = useQuery({
     queryKey: ['linkedin-dash', orgId],
@@ -60,12 +73,16 @@ export default function LinkedInView({ orgId, canUpload = true }) {
     qc.invalidateQueries({ queryKey: ['linkedin-dash', orgId] });
   };
 
-  // Daily series clipped to the selected window (charts show the range only).
+  // Daily series clipped to the selected window, ending at the tab's anchor
+  // date so charts cover exactly the same days as the totals above them.
   const series = useMemo(() => {
     const all = report?.series || [];
     if (!all.length) return [];
-    const cutoff = new Date(all[all.length - 1].date).getTime() - range * 86400000;
-    return all.filter((s) => new Date(s.date).getTime() > cutoff).map((s) => ({ ...s, x: fmtDate(s.date) }));
+    const end = new Date(report?.weekly?.anchorDate || all[all.length - 1].date).getTime();
+    const cutoff = end - range * 86400000;
+    return all
+      .filter((s) => { const t = new Date(s.date).getTime(); return t > cutoff && t <= end; })
+      .map((s) => ({ ...s, x: fmtDate(s.date) }));
   }, [report, range]);
 
   const totals = report?.weekly?.current || {};
@@ -114,7 +131,7 @@ export default function LinkedInView({ orgId, canUpload = true }) {
           {tab === 'content' && <ContentTab totals={totals} deltas={deltas} series={series} posts={dash?.posts || []} range={range} hasData={report?.hasData} />}
           {tab === 'visitors' && <VisitorsTab totals={totals} deltas={deltas} series={series} demographics={dash?.demographics?.visitors || {}} range={range} />}
           {tab === 'followers' && <FollowersTab totals={totals} deltas={deltas} latest={latest} series={series} demographics={dash?.demographics?.followers || {}} range={range} />}
-          {tab === 'competitors' && <CompetitorsTab competitors={dash?.competitors || []} latest={latest} />}
+          {tab === 'competitors' && <CompetitorsTab competitors={dash?.competitors || []} latest={{ ...latest, ...totals }} />}
           {tab === 'search' && <SimpleMetricTab title="Search appearances" description="How often the page appeared in LinkedIn search results." field="searchAppearances" totals={totals} deltas={deltas} series={series} range={range} />}
           {tab === 'leads' && <LeadsTab totals={totals} deltas={deltas} series={series} range={range} />}
         </>
@@ -475,7 +492,9 @@ function FollowersTab({ totals, deltas, latest, series, demographics, range }) {
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <MetricCard label="Total followers" value={latest.followers} delta={deltas.followers} />
+        {/* totals.followers is the end-of-window snapshot from the followers-
+            anchored bucket — the overall latest day may not carry follower data. */}
+        <MetricCard label="Total followers" value={totals.followers || latest.followers} delta={deltas.followers} />
         <MetricCard label="New followers" suffix={`${range}d`} value={totals.newFollowers} delta={deltas.newFollowers} />
         <MetricCard label="Organic followers" suffix={`${range}d`} value={totals.organicFollowers} delta={deltas.organicFollowers} />
         <MetricCard label="Sponsored followers" suffix={`${range}d`} value={totals.sponsoredFollowers} delta={deltas.sponsoredFollowers} />

@@ -19,6 +19,7 @@ import Websites from './pages/Websites.jsx';
 import Purchases from './pages/Purchases.jsx';
 import Goals from './pages/Goals.jsx';
 import Planners from './pages/Planners.jsx';
+import Assistant from './pages/Assistant.jsx';
 import Calendar from './pages/Calendar.jsx';
 import ActivityLogs from './pages/ActivityLogs.jsx';
 import Settings from './pages/Settings.jsx';
@@ -67,6 +68,7 @@ export default function App() {
         <Route path="/purchases" element={<Purchases />} />
         <Route path="/goals" element={<Goals />} />
         <Route path="/planners" element={<Planners />} />
+        <Route path="/assistant" element={<Assistant />} />
         <Route path="/calendar" element={<Calendar />} />
         <Route path="/activity" element={<ActivityLogs />} />
         <Route path="/settings" element={<Settings />} />

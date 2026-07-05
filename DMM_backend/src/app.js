@@ -29,6 +29,7 @@ import youtubeRoutes from './routes/youtubeRoutes.js';
 import linkRoutes from './routes/linkRoutes.js';
 import goalRoutes from './routes/goalRoutes.js';
 import planRoutes from './routes/planRoutes.js';
+import aiRoutes from './routes/aiRoutes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -78,6 +79,7 @@ app.use('/api/youtube', youtubeRoutes);
 app.use('/api/link-preview', linkRoutes);
 app.use('/api/goals', goalRoutes);
 app.use('/api/plans', planRoutes);
+app.use('/api/ai', aiRoutes);
 app.use('/api/competitors', competitorRoutes);
 app.use('/api/purchases', purchaseRoutes);
 app.use('/api/brand', brandAssetRoutes);

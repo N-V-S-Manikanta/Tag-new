@@ -1,13 +1,14 @@
 import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard, FileImage, Images, CheckSquare, BarChart3, CalendarDays,
-  FileText, Bell, Settings, X, TrendingUp, Palette, Share2, ShoppingBag, Camera, ClipboardList,
+  FileText, Bell, Settings, X, TrendingUp, Palette, Share2, ShoppingBag, Camera, ClipboardList, Sparkles,
 } from 'lucide-react';
 import { cn, roleLabel } from '../../lib/utils.js';
 import { useAuthStore } from '../../store/authStore.js';
 
 const MAIN_NAV = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { to: '/assistant', label: 'AI Assistant', icon: Sparkles },
   { to: '/templates', label: 'Templates', icon: FileImage },
   { to: '/assets', label: 'Assets', icon: Images },
   { to: '/brand-library', label: 'Brand Library', icon: Palette },

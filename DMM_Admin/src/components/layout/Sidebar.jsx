@@ -1,9 +1,10 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Building2, Users, Activity, BarChart3, CalendarDays, Settings, X, ShieldCheck, CheckSquare, Images, Share2, ShoppingBag, Target, Globe, Camera, ClipboardList } from 'lucide-react';
+import { LayoutDashboard, Building2, Users, Activity, BarChart3, CalendarDays, Settings, X, ShieldCheck, CheckSquare, Images, Share2, ShoppingBag, Target, Globe, Camera, ClipboardList, Sparkles } from 'lucide-react';
 import { cn } from '../../lib/utils.js';
 
 const NAV = [
   { to: '/dashboard', label: 'Overview', icon: LayoutDashboard },
+  { to: '/assistant', label: 'AI Assistant', icon: Sparkles },
   { to: '/organizations', label: 'Organizations', icon: Building2 },
   { to: '/users', label: 'User Management', icon: Users },
   { to: '/approvals', label: 'Approvals', icon: CheckSquare },

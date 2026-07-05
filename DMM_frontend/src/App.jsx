@@ -21,6 +21,7 @@ import SocialHandlers from './pages/SocialHandlers.jsx';
 import PremiumPacks from './pages/PremiumPacks.jsx';
 import Approvals from './pages/Approvals.jsx';
 import Planner from './pages/Planner.jsx';
+import Assistant from './pages/Assistant.jsx';
 import ApprovalDetail from './pages/ApprovalDetail.jsx';
 import ApprovalAnalytics from './pages/ApprovalAnalytics.jsx';
 import Calendar from './pages/Calendar.jsx';
@@ -83,6 +84,7 @@ export default function App() {
         <Route path="/approvals" element={<Approvals />} />
         <Route path="/approvals/:id" element={<ApprovalDetail />} />
         <Route path="/planner" element={<Planner />} />
+        <Route path="/assistant" element={<Assistant />} />
         <Route path="/calendar" element={<Calendar />} />
         <Route path="/social-analytics" element={<SocialAnalytics />} />
         <Route path="/approval-analytics" element={<ApprovalAnalytics />} />

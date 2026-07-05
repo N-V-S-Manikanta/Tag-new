@@ -125,6 +125,12 @@ export const approvalApi = {
   remove: (id) => api.delete(`/approvals/${id}`).then((r) => r.data),
 };
 
+// ---- AI assistant (key lives only on the backend) ----
+export const aiApi = {
+  status: () => api.get('/ai/status').then((r) => r.data),
+  chat: (messages) => api.post('/ai/chat', { messages }).then((r) => r.data),
+};
+
 // ---- Link preview (Open-Graph thumbnail/title) ----
 export const linkApi = {
   preview: (url) => api.get('/link-preview', { params: { url } }).then((r) => r.data),

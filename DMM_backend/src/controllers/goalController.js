@@ -13,7 +13,7 @@ const audienceField = (platform) => (platform === 'YouTube' ? 'subscribers' : 'f
 //  - currentFollowers:  audience from the latest snapshot
 //  - gainedFollowers:   growth achieved during the period so far
 //  - postsPublished:    approvals POSTED for this org+platform inside the period
-const computeProgress = async (goal) => {
+export const computeProgress = async (goal) => {
   const field = audienceField(goal.platform);
   const [latest, baselineSnap, postsPublished] = await Promise.all([
     Analytics.findOne({ organization: goal.organization, platform: goal.platform }).sort({ date: -1 }).lean(),

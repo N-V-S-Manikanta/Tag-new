@@ -1,6 +1,9 @@
+import { useQuery } from '@tanstack/react-query';
 import { Linkedin, Instagram, Youtube, Facebook } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
+import { analyticsApi } from '../../api/endpoints.js';
+import { useAuthStore } from '../../store/authStore.js';
 import { formatNumber } from '../../lib/utils.js';
 
 const CONFIG = {
@@ -12,11 +15,22 @@ const CONFIG = {
 
 export default function SocialCards({ social }) {
   const navigate = useNavigate();
+  const { user } = useAuthStore();
+  const orgId = user?.organization?._id || user?.organization;
+
+  // LinkedIn values come from the 15-day pulse (same numbers as the LinkedIn
+  // view / LinkedIn itself) instead of a single day's snapshot.
+  const { data: pulseData } = useQuery({ queryKey: ['analytics-pulse'], queryFn: analyticsApi.pulse, enabled: !!orgId });
+  const pulse = (pulseData?.organizations || []).find((o) => String(o.organization._id) === String(orgId));
+  const linkedin = pulse?.hasData
+    ? { followers: pulse.followers, impressions: pulse.impressions, engagementRate: pulse.engagementRate }
+    : social?.LinkedIn;
+
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
       {Object.entries(CONFIG).map(([platform, cfg], i) => {
         const Icon = cfg.icon;
-        const data = social?.[platform];
+        const data = platform === 'LinkedIn' ? linkedin : social?.[platform];
         const hasData = !!data;
         return (
           <motion.div

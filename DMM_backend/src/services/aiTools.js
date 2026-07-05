@@ -176,14 +176,18 @@ const handlers = {
     return Promise.all(goals.map(async (g) => {
       const p = await computeProgress(g);
       const daysLeft = Math.max(0, Math.ceil((new Date(g.endDate) - Date.now()) / 86400000));
+      const needed = Math.max(0, (g.targetFollowers || 0) - (p.baselineFollowers || 0));
       return {
         organization: org.name,
         platform: g.platform,
         period: `${iso(g.startDate)} to ${iso(g.endDate)}`,
         daysLeft,
         targetFollowers: g.targetFollowers || undefined,
+        startedAt: p.baselineFollowers || undefined,
         currentFollowers: p.currentFollowers,
         gainedSinceStart: p.gainedFollowers,
+        stillNeeded: g.targetFollowers ? Math.max(0, g.targetFollowers - p.currentFollowers) : undefined,
+        progressPct: g.targetFollowers ? (needed > 0 ? Math.min(100, Math.round((p.gainedFollowers / needed) * 100)) : 100) : undefined,
         targetPosts: g.targetPosts || undefined,
         postsPublished: p.postsPublished,
         note: g.note || undefined,

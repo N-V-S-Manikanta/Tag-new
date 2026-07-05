@@ -49,6 +49,7 @@ function Inner({ orgId }) {
     return <div className="grid gap-5 md:grid-cols-2">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-64" />)}</div>;
   }
   const goals = data?.goals || [];
+  const audiences = data?.audiences || {};
   const byPlatform = Object.fromEntries(goals.map((g) => [g.platform, g]));
 
   return (
@@ -56,6 +57,7 @@ function Inner({ orgId }) {
       {PLATFORMS.map((p) => (
         <PlatformGoalCard
           key={p.key} orgId={orgId} platform={p} goal={byPlatform[p.key]}
+          audience={audiences[p.key] || 0}
           editing={editing === p.key}
           onEdit={() => setEditing(p.key)}
           onClose={() => setEditing(null)}
@@ -66,8 +68,8 @@ function Inner({ orgId }) {
   );
 }
 
-function PlatformGoalCard({ orgId, platform, goal, editing, onEdit, onClose, queryKey }) {
-  const { key, icon: Icon, color, audience } = platform;
+function PlatformGoalCard({ orgId, platform, goal, audience, editing, onEdit, onClose, queryKey }) {
+  const { key, icon: Icon, color, audience: audienceWord } = platform; // 'followers' | 'subscribers'
   const qc = useQueryClient();
 
   const removeMut = useMutation({
@@ -93,13 +95,15 @@ function PlatformGoalCard({ orgId, platform, goal, editing, onEdit, onClose, que
 
       <div className="p-5">
         {editing ? (
-          <GoalForm orgId={orgId} platformKey={key} audience={audience} goal={goal} onClose={onClose} queryKey={queryKey} />
+          <GoalForm orgId={orgId} platformKey={key} audienceLabel={audienceWord} currentAudience={audience} goal={goal} onClose={onClose} queryKey={queryKey} />
         ) : goal ? (
-          <GoalProgress goal={goal} color={color} audience={audience} />
+          <GoalProgress goal={goal} color={color} audienceLabel={audienceWord} />
         ) : (
           <div className="flex flex-col items-center gap-3 py-6 text-center">
             <Target className="h-8 w-8 text-slate-300 dark:text-slate-600" />
-            <p className="text-sm text-slate-400">No {key} goal yet for this organization.</p>
+            <p className="text-sm text-slate-400">
+              No {key} goal yet{audience > 0 ? <> — currently <span className="font-bold text-slate-600 dark:text-slate-300">{formatNumber(audience)}</span> {audienceWord}</> : ''}.
+            </p>
             <Button size="sm" onClick={onEdit}><Target className="h-4 w-4" /> Set a goal</Button>
           </div>
         )}
@@ -108,7 +112,15 @@ function PlatformGoalCard({ orgId, platform, goal, editing, onEdit, onClose, que
   );
 }
 
-function GoalProgress({ goal, color, audience }) {
+// Pace verdict: goal progress compared with how much of the period has passed.
+const paceOf = (goalPct, timePct, done) => {
+  if (done) return { label: 'Goal reached 🎉', cls: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400' };
+  if (goalPct >= timePct) return { label: 'On track', cls: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400' };
+  if (goalPct >= timePct - 15) return { label: 'Slightly behind', cls: 'bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400' };
+  return { label: 'Behind pace', cls: 'bg-rose-50 text-rose-600 dark:bg-rose-500/10 dark:text-rose-400' };
+};
+
+function GoalProgress({ goal, color, audienceLabel }) {
   const p = goal.progress || {};
   const now = Date.now();
   const start = new Date(goal.startDate).getTime();
@@ -117,6 +129,19 @@ function GoalProgress({ goal, color, audience }) {
   const timePct = Math.min(100, Math.max(0, Math.round(((now - start) / (end - start)) * 100)));
   const over = now > end;
 
+  // Growth is measured from where you STARTED, not from zero: with 11,172
+  // followers and a 13,000 target, the goal is the +1,828 gap.
+  const target = goal.targetFollowers || 0;
+  const baseline = p.baselineFollowers || 0;
+  const current = p.currentFollowers || 0;
+  const needed = Math.max(0, target - baseline);
+  const gained = Math.max(0, current - baseline);
+  const toGo = Math.max(0, target - current);
+  const goalPct = target > 0
+    ? (needed > 0 ? Math.min(100, Math.round((gained / needed) * 100)) : (current >= target ? 100 : 0))
+    : 0;
+  const pace = paceOf(goalPct, timePct, current >= target && target > 0);
+
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-slate-50 px-3.5 py-2.5 text-xs dark:bg-slate-800/50">
@@ -124,46 +149,81 @@ function GoalProgress({ goal, color, audience }) {
           <CalendarRange className="h-3.5 w-3.5 text-brand-500" />
           {formatDate(goal.startDate)} → {formatDate(goal.endDate)}
         </span>
-        <span className={cn('font-bold', over ? 'text-rose-500' : 'text-emerald-600 dark:text-emerald-400')}>
-          {over ? 'Period ended' : `${daysLeft} days left`} · {timePct}% of time elapsed
+        <span className={cn('font-bold', over ? 'text-rose-500' : 'text-slate-500 dark:text-slate-400')}>
+          {over ? 'Period ended' : `${daysLeft} days left`} · {timePct}% of time used
         </span>
       </div>
 
-      {goal.targetFollowers > 0 && (
-        <GoalBar icon={Users} label={`Total ${audience}`} current={p.currentFollowers || 0} target={goal.targetFollowers} color={color}
-          sub={p.baselineFollowers != null ? `+${formatNumber(p.gainedFollowers || 0)} gained since start (from ${formatNumber(p.baselineFollowers)})` : null} />
+      {target > 0 && (
+        <div>
+          {/* Started → Now → Goal */}
+          <div className="mb-3 grid grid-cols-3 gap-2 text-center">
+            <div className="rounded-xl bg-slate-50 py-2.5 dark:bg-slate-800/50">
+              <p className="text-lg font-extrabold text-slate-500 dark:text-slate-400">{formatNumber(baseline)}</p>
+              <p className="text-[11px] font-medium text-slate-400">Started with</p>
+            </div>
+            <div className="rounded-xl py-2.5" style={{ background: `${color}12` }}>
+              <p className="text-lg font-extrabold" style={{ color }}>{formatNumber(current)}</p>
+              <p className="text-[11px] font-medium text-slate-400">Now</p>
+            </div>
+            <div className="rounded-xl bg-slate-50 py-2.5 dark:bg-slate-800/50">
+              <p className="text-lg font-extrabold text-slate-800 dark:text-white">{formatNumber(target)}</p>
+              <p className="text-[11px] font-medium text-slate-400">Goal</p>
+            </div>
+          </div>
+
+          <div className="mb-1.5 flex items-center justify-between text-sm">
+            <span className="inline-flex items-center gap-1.5 font-medium text-slate-600 dark:text-slate-300">
+              <Users className="h-4 w-4" /> Goal progress
+            </span>
+            <span className={cn('rounded-full px-2 py-0.5 text-[11px] font-bold', pace.cls)}>{pace.label}</span>
+          </div>
+          <div className="relative h-3.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+            <div className="h-full rounded-full transition-all" style={{ width: `${goalPct}%`, background: color }} />
+            {/* time marker: where you SHOULD be if growth were perfectly even */}
+            {!over && timePct > 2 && timePct < 98 && (
+              <div className="absolute top-0 h-full w-0.5 bg-slate-400/70 dark:bg-slate-500" style={{ left: `${timePct}%` }} title={`${timePct}% of time used`} />
+            )}
+          </div>
+          <div className="mt-1.5 flex items-center justify-between text-xs text-slate-400">
+            <span>
+              <span className="font-bold text-emerald-600 dark:text-emerald-400">+{formatNumber(gained)}</span> gained of{' '}
+              <span className="font-semibold text-slate-500 dark:text-slate-300">{formatNumber(needed)}</span> needed
+              {toGo > 0 && <> · <span className="font-semibold">{formatNumber(toGo)}</span> {audienceLabel} to go</>}
+            </span>
+            <span className="font-bold text-slate-600 dark:text-slate-300">{goalPct}%</span>
+          </div>
+        </div>
       )}
+
       {goal.targetPosts > 0 && (
-        <GoalBar icon={Send} label="Posts published in period" current={p.postsPublished || 0} target={goal.targetPosts} color="#0ea5e9" />
+        <PostsBar current={p.postsPublished || 0} target={goal.targetPosts} />
       )}
       {goal.note && <p className="rounded-xl bg-slate-50 p-3 text-sm text-slate-500 dark:bg-slate-800/50">{goal.note}</p>}
-      {!p.lastEntry && goal.targetFollowers > 0 && (
+      {!p.lastEntry && target > 0 && (
         <p className="text-xs text-amber-600 dark:text-amber-400">No analytics entries yet for this platform — progress will appear once metrics are synced or imported.</p>
       )}
     </div>
   );
 }
 
-function GoalBar({ icon: Icon, label, current, target, color, sub }) {
+function PostsBar({ current, target }) {
   const pct = target > 0 ? Math.min(100, Math.round((current / target) * 100)) : 0;
   return (
     <div>
       <div className="mb-1.5 flex items-center justify-between text-sm">
-        <span className="inline-flex items-center gap-1.5 font-medium text-slate-600 dark:text-slate-300"><Icon className="h-4 w-4" /> {label}</span>
+        <span className="inline-flex items-center gap-1.5 font-medium text-slate-600 dark:text-slate-300"><Send className="h-4 w-4" /> Posts published in period</span>
         <span className="font-semibold text-slate-700 dark:text-slate-200">{formatNumber(current)} / {formatNumber(target)}</span>
       </div>
       <div className="h-3 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-        <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: color }} />
+        <div className="h-full rounded-full bg-sky-500 transition-all" style={{ width: `${pct}%` }} />
       </div>
-      <div className="mt-1 flex items-center justify-between text-xs text-slate-400">
-        <span>{sub || ''}</span>
-        <span className="font-semibold">{pct}%</span>
-      </div>
+      <p className="mt-1 text-right text-xs font-semibold text-slate-400">{pct}%</p>
     </div>
   );
 }
 
-function GoalForm({ orgId, platformKey, audience, goal, onClose, queryKey }) {
+function GoalForm({ orgId, platformKey, audienceLabel, currentAudience, goal, onClose, queryKey }) {
   const qc = useQueryClient();
   const initialMonths = goal ? 0 : 3; // editing an existing goal starts on its stored dates
   const [form, setForm] = useState({
@@ -192,11 +252,27 @@ function GoalForm({ orgId, platformKey, audience, goal, onClose, queryKey }) {
     onError: (e) => toast.error(e.response?.data?.message || 'Failed to save goal'),
   });
 
+  const target = Number(form.targetFollowers) || 0;
+  const gap = target - currentAudience;
+
   return (
     <form onSubmit={(e) => { e.preventDefault(); saveMut.mutate(); }} className="space-y-4">
+      {currentAudience > 0 && (
+        <p className="rounded-xl bg-slate-50 px-3.5 py-2.5 text-sm text-slate-500 dark:bg-slate-800/50 dark:text-slate-400">
+          Currently <span className="font-extrabold text-slate-700 dark:text-white">{formatNumber(currentAudience)}</span> {audienceLabel}
+          {target > currentAudience && (
+            <> — reaching <span className="font-bold">{formatNumber(target)}</span> means gaining{' '}
+            <span className="font-extrabold text-emerald-600 dark:text-emerald-400">+{formatNumber(gap)}</span> in this period.</>
+          )}
+          {target > 0 && target <= currentAudience && (
+            <span className="font-semibold text-amber-600 dark:text-amber-400"> — the target should be higher than the current count.</span>
+          )}
+        </p>
+      )}
       <div className="grid grid-cols-2 gap-3">
-        <Input label={`Target ${audience} (total)`} type="number" min="0" value={form.targetFollowers}
-          onChange={(e) => setForm({ ...form, targetFollowers: e.target.value })} placeholder="e.g. 10000" />
+        <Input label={`Target ${audienceLabel} (total to reach)`} type="number" min="0" value={form.targetFollowers}
+          onChange={(e) => setForm({ ...form, targetFollowers: e.target.value })}
+          placeholder={currentAudience > 0 ? `e.g. ${formatNumber(Math.round((currentAudience * 1.15) / 100) * 100).replace(/,/g, '')}` : 'e.g. 13000'} />
         <Input label="Target posts in period" type="number" min="0" value={form.targetPosts}
           onChange={(e) => setForm({ ...form, targetPosts: e.target.value })} placeholder="e.g. 40" />
       </div>

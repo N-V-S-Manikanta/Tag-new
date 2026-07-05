@@ -15,9 +15,11 @@ const audienceField = (platform) => (platform === 'YouTube' ? 'subscribers' : 'f
 //  - postsPublished:    approvals POSTED for this org+platform inside the period
 export const computeProgress = async (goal) => {
   const field = audienceField(goal.platform);
+  // Only snapshots that actually carry audience data — content-only days
+  // store 0 followers and would corrupt the baseline/current readings.
   const [latest, baselineSnap, postsPublished] = await Promise.all([
-    Analytics.findOne({ organization: goal.organization, platform: goal.platform }).sort({ date: -1 }).lean(),
-    Analytics.findOne({ organization: goal.organization, platform: goal.platform, date: { $lte: goal.startDate } }).sort({ date: -1 }).lean(),
+    Analytics.findOne({ organization: goal.organization, platform: goal.platform, [field]: { $gt: 0 } }).sort({ date: -1 }).lean(),
+    Analytics.findOne({ organization: goal.organization, platform: goal.platform, [field]: { $gt: 0 }, date: { $lte: goal.startDate } }).sort({ date: -1 }).lean(),
     ApprovalRequest.countDocuments({
       organization: goal.organization,
       platform: goal.platform,
@@ -37,13 +39,23 @@ export const computeProgress = async (goal) => {
 };
 
 // @route GET /api/goals?organizationId=...  — all goals for one organization,
-// each with live progress. Shared workspace: any authenticated user can view.
+// each with live progress, plus each platform's CURRENT audience so the goal
+// form can show "currently 11,172 → target 13,000 means +1,828".
+// Shared workspace: any authenticated user can view.
 export const getGoals = asyncHandler(async (req, res) => {
   const { organizationId } = req.query;
   if (!organizationId) { res.status(400); throw new Error('organizationId is required'); }
   const goals = await Goal.find({ organization: organizationId }).sort({ platform: 1 }).lean();
   const withProgress = await Promise.all(goals.map(async (g) => ({ ...g, progress: await computeProgress(g) })));
-  res.json({ success: true, platforms: PLATFORMS, goals: withProgress });
+
+  const audiences = {};
+  await Promise.all(PLATFORMS.map(async (p) => {
+    const field = audienceField(p);
+    const snap = await Analytics.findOne({ organization: organizationId, platform: p, [field]: { $gt: 0 } }).sort({ date: -1 }).lean();
+    audiences[p] = snap?.[field] || 0;
+  }));
+
+  res.json({ success: true, platforms: PLATFORMS, audiences, goals: withProgress });
 });
 
 // @route POST /api/goals  (ADMIN) — create or replace the goal for org+platform.

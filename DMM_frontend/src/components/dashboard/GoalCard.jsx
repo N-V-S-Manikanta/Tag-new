@@ -38,6 +38,17 @@ function PlatformGoal({ goal }) {
   const daysLeft = Math.max(0, Math.ceil((new Date(goal.endDate) - Date.now()) / 86400000));
   const audience = goal.platform === 'YouTube' ? 'subscribers' : 'followers';
 
+  // Growth is measured from the starting point: with 11,172 followers and a
+  // 13,000 target, progress tracks the +1,828 gap — not current ÷ target.
+  const target = goal.targetFollowers || 0;
+  const baseline = p.baselineFollowers || 0;
+  const current = p.currentFollowers || 0;
+  const needed = Math.max(0, target - baseline);
+  const gained = Math.max(0, current - baseline);
+  const pct = target > 0
+    ? (needed > 0 ? Math.min(100, Math.round((gained / needed) * 100)) : (current >= target ? 100 : 0))
+    : 0;
+
   return (
     <div className="rounded-xl border border-slate-100 p-4 dark:border-slate-800">
       <div className="mb-3 flex items-center justify-between">
@@ -52,27 +63,35 @@ function PlatformGoal({ goal }) {
         </span>
       </div>
       <div className="space-y-3">
-        {goal.targetFollowers > 0 && (
-          <Bar icon={Users} label={audience} current={p.currentFollowers || 0} target={goal.targetFollowers} color={meta.color || '#7c3aed'} />
+        {target > 0 && (
+          <div>
+            <div className="mb-1 flex items-center justify-between text-xs">
+              <span className="inline-flex items-center gap-1 font-medium text-slate-500 dark:text-slate-400">
+                <Users className="h-3.5 w-3.5" /> {formatNumber(current)} of {formatNumber(target)} {audience}
+              </span>
+              <span className="font-semibold text-slate-600 dark:text-slate-300">
+                <span className="text-emerald-600 dark:text-emerald-400">+{formatNumber(gained)}</span> / {formatNumber(needed)} <span className="text-slate-400">({pct}%)</span>
+              </span>
+            </div>
+            <div className="h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+              <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: meta.color || '#7c3aed' }} />
+            </div>
+          </div>
         )}
         {goal.targetPosts > 0 && (
-          <Bar icon={Send} label="posts" current={p.postsPublished || 0} target={goal.targetPosts} color="#0ea5e9" />
+          <div>
+            <div className="mb-1 flex items-center justify-between text-xs">
+              <span className="inline-flex items-center gap-1 font-medium text-slate-500 dark:text-slate-400"><Send className="h-3.5 w-3.5" /> posts</span>
+              <span className="font-semibold text-slate-600 dark:text-slate-300">
+                {formatNumber(p.postsPublished || 0)} / {formatNumber(goal.targetPosts)}
+                <span className="text-slate-400"> ({Math.min(100, Math.round(((p.postsPublished || 0) / goal.targetPosts) * 100))}%)</span>
+              </span>
+            </div>
+            <div className="h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+              <div className="h-full rounded-full bg-sky-500 transition-all" style={{ width: `${Math.min(100, Math.round(((p.postsPublished || 0) / goal.targetPosts) * 100))}%` }} />
+            </div>
+          </div>
         )}
-      </div>
-    </div>
-  );
-}
-
-function Bar({ icon: Icon, label, current, target, color }) {
-  const pct = target > 0 ? Math.min(100, Math.round((current / target) * 100)) : 0;
-  return (
-    <div>
-      <div className="mb-1 flex items-center justify-between text-xs">
-        <span className="inline-flex items-center gap-1 font-medium capitalize text-slate-500 dark:text-slate-400"><Icon className="h-3.5 w-3.5" /> {label}</span>
-        <span className="font-semibold text-slate-600 dark:text-slate-300">{formatNumber(current)} / {formatNumber(target)} <span className="text-slate-400">({pct}%)</span></span>
-      </div>
-      <div className="h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-        <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: color }} />
       </div>
     </div>
   );

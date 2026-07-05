@@ -1,5 +1,6 @@
 import { Readable } from 'stream';
 import ExcelJS from 'exceljs';
+import * as XLSX from 'xlsx';
 import Organization, { slugify } from '../models/Organization.js';
 
 // ----------------------------------------------------------------------------
@@ -42,20 +43,56 @@ export const loadGrid = async (file) => {
   return grids[0].grid;
 };
 
+// XLSX files are zip archives ("PK…"); legacy .xls files are OLE compound
+// documents (D0 CF 11 E0). LinkedIn still exports the legacy format.
+const isZipFile = (buf) => buf && buf.length > 3 && buf[0] === 0x50 && buf[1] === 0x4b;
+
+// SheetJS fallback: reads legacy .xls (BIFF), HTML-table exports and other
+// spreadsheet formats ExcelJS can't open. Converted to the same grid shape.
+const loadGridsWithSheetJS = (buffer) => {
+  const wb = XLSX.read(buffer, { type: 'buffer', cellDates: true });
+  if (!wb.SheetNames.length) throw new Error('The file has no sheets.');
+  return wb.SheetNames.map((name) => {
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, raw: true, defval: null });
+    // Match the exceljs convention: 1-indexed rows (index 0 unused), skip empties.
+    const grid = rows
+      .filter((r) => Array.isArray(r) && r.some((v) => v !== null && v !== ''))
+      .map((r) => [undefined, ...r]);
+    return { name, grid };
+  });
+};
+
 // Load EVERY worksheet of an uploaded file: [{ name, grid }] in sheet order.
 // LinkedIn's analytics exports are multi-sheet (e.g. "Metrics" + "All posts",
 // or "New followers" + demographic breakdowns), so imports must see them all.
+// Modern .xlsx goes through ExcelJS; legacy .xls (what LinkedIn actually
+// downloads) and anything else goes through SheetJS.
 export const loadAllGrids = async (file) => {
-  const wb = new ExcelJS.Workbook();
   const isCsv = /\.csv$/i.test(file.originalname || '') || file.mimetype === 'text/csv';
-  if (isCsv) await wb.csv.read(Readable.from(file.buffer));
-  else await wb.xlsx.load(file.buffer);
-  if (!wb.worksheets.length) throw new Error('The file has no sheets.');
-  return wb.worksheets.map((ws) => {
-    const grid = [];
-    ws.eachRow({ includeEmpty: false }, (row) => { grid.push(row.values); });
-    return { name: ws.name || '', grid };
-  });
+  if (isCsv) {
+    const wb = new ExcelJS.Workbook();
+    await wb.csv.read(Readable.from(file.buffer));
+    return wb.worksheets.map((ws) => {
+      const grid = [];
+      ws.eachRow({ includeEmpty: false }, (row) => { grid.push(row.values); });
+      return { name: ws.name || '', grid };
+    });
+  }
+  if (isZipFile(file.buffer)) {
+    try {
+      const wb = new ExcelJS.Workbook();
+      await wb.xlsx.load(file.buffer);
+      if (!wb.worksheets.length) throw new Error('The file has no sheets.');
+      return wb.worksheets.map((ws) => {
+        const grid = [];
+        ws.eachRow({ includeEmpty: false }, (row) => { grid.push(row.values); });
+        return { name: ws.name || '', grid };
+      });
+    } catch {
+      // fall through — some tools produce zips ExcelJS chokes on
+    }
+  }
+  return loadGridsWithSheetJS(file.buffer);
 };
 
 // Find the header row and a { field: columnIndex } map. `matchers` is an ordered

@@ -32,6 +32,7 @@ export const analyticsApi = {
   get: (organizationId) => api.get('/analytics', { params: { organizationId } }).then((r) => r.data),
   report: (platform, organizationId, range, anchor, from, to) => api.get(`/analytics/${platform}/report`, { params: { organizationId, range, anchor, from, to } }).then((r) => r.data),
   history: (platform, organizationId) => api.get(`/analytics/${platform}/history`, { params: { organizationId } }).then((r) => r.data),
+  pulse: () => api.get('/analytics/pulse').then((r) => r.data),
 };
 
 // LinkedIn export hub — dashboard for everyone; uploads for CEO/Admin.

@@ -9,6 +9,7 @@ import PageHeader from '../components/layout/PageHeader.jsx';
 import StatCard from '../components/dashboard/StatCard.jsx';
 import SocialCards from '../components/dashboard/SocialCards.jsx';
 import GoalCard from '../components/dashboard/GoalCard.jsx';
+import LinkedInPulse from '../components/dashboard/LinkedInPulse.jsx';
 import ActivityTimeline from '../components/dashboard/ActivityTimeline.jsx';
 import MyUploads from '../components/dashboard/MyUploads.jsx';
 import { MonthlyTrendChart, FollowerTrendChart, PlatformBarChart, StatusPieChart } from '../components/dashboard/Charts.jsx';
@@ -55,6 +56,9 @@ export default function Dashboard() {
         title={`Welcome back, ${user?.name?.split(' ')[0]} 👋`}
         subtitle={isCEO ? 'Here is what is happening across your marketing operations.' : 'Track your content and stay on top of approvals.'}
       />
+
+      {/* LinkedIn essentials — last 15 days (shows once data is imported) */}
+      {user?.organization && <LinkedInPulse orgId={user.organization._id || user.organization} />}
 
       {/* Yearly goal progress (only shows when a goal is set) */}
       {user?.organization && <GoalCard orgId={user.organization._id || user.organization} />}

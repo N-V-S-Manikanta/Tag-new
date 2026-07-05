@@ -1,6 +1,7 @@
 import express from 'express';
 import {
   getAnalytics,
+  getAnalyticsPulse,
   getPlatformReport,
   getPlatformHistory,
   compareOrganizations,
@@ -21,6 +22,7 @@ router.get('/', getAnalytics);
 router.get('/template', analyticsTemplate); // before /:platform
 router.get('/compare', authorize(ROLES.ADMIN), compareOrganizations); // before /:platform
 router.get('/overview', authorize(ROLES.ADMIN), getAnalyticsOverview); // before /:platform
+router.get('/pulse', getAnalyticsPulse); // any authenticated user; before /:platform
 router.post('/', authorize(ROLES.ADMIN, ROLES.CEO), recordAnalytics);
 router.delete('/', authorize(ROLES.ADMIN, ROLES.CEO), clearAnalytics);
 router.post('/import', authorize(ROLES.ADMIN, ROLES.CEO), upload.single('file'), importAnalytics);

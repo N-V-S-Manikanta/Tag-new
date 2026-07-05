@@ -55,7 +55,7 @@ const TAB_ANCHOR = {
 export default function LinkedInView({ orgId, canUpload = true }) {
   const qc = useQueryClient();
   const [tab, setTab] = useState('content');
-  const [preset, setPreset] = useState(30); // 15 | 30 | 90 | 365 | 'custom'
+  const [preset, setPreset] = useState(15); // 15 | 30 | 90 | 365 | 'custom' — LinkedIn's default
   const [custom, setCustom] = useState({ from: '', to: '' });
 
   const isCustom = preset === 'custom';

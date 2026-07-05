@@ -50,6 +50,7 @@ export const analyticsApi = {
   report: (platform, organizationId, range, anchor, from, to) => api.get(`/analytics/${platform}/report`, { params: { organizationId, range, anchor, from, to } }).then((r) => r.data),
   compare: (platform, metric) => api.get('/analytics/compare', { params: { platform, metric } }).then((r) => r.data),
   overview: () => api.get('/analytics/overview').then((r) => r.data),
+  pulse: () => api.get('/analytics/pulse').then((r) => r.data),
   record: (data) => api.post('/analytics', data).then((r) => r.data),
   clear: (platform, organizationId) => api.delete('/analytics', { params: { platform, organizationId } }).then((r) => r.data),
   import: (formData) => api.post('/analytics/import', formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data),

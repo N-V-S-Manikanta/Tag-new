@@ -2,10 +2,10 @@ import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import {
   Building2, Users as UsersIcon, ShieldCheck, Crown, User as UserIcon, Send,
-  Activity, ArrowRight, BarChart3, CalendarDays,
+  Activity, ArrowRight, BarChart3, CalendarDays, Linkedin,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { organizationApi, userApi, activityApi } from '../api/endpoints.js';
+import { organizationApi, userApi, activityApi, analyticsApi } from '../api/endpoints.js';
 import { useAuthStore } from '../store/authStore.js';
 import PageHeader from '../components/layout/PageHeader.jsx';
 import { Card, Avatar, Skeleton, EmptyState } from '../components/ui/primitives.jsx';
@@ -57,6 +57,8 @@ export default function Overview() {
             </motion.div>
           ))}
       </div>
+
+      <LinkedInPulse onOpen={() => navigate('/analytics')} />
 
       <div className="grid gap-4 lg:grid-cols-3">
         {/* Organizations summary */}
@@ -112,6 +114,59 @@ export default function Overview() {
         )}
       </Card>
     </div>
+  );
+}
+
+// The three headline LinkedIn numbers per organization over the last 15 days —
+// the same essentials the LinkedIn view opens with. Click a row for the full view.
+function LinkedInPulse({ onOpen }) {
+  const { data, isLoading } = useQuery({ queryKey: ['analytics-pulse'], queryFn: analyticsApi.pulse });
+  const rows = (data?.organizations || []).filter((o) => o.hasData);
+  if (!isLoading && rows.length === 0) return null;
+
+  return (
+    <Card className="overflow-hidden p-0">
+      <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3.5 dark:border-slate-800">
+        <h3 className="flex items-center gap-2 font-bold text-slate-800 dark:text-white">
+          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#0A66C2] text-white"><Linkedin className="h-4 w-4" /></span>
+          LinkedIn pulse <span className="text-sm font-normal text-slate-400">· last {data?.days || 15} days</span>
+        </h3>
+        <button onClick={onOpen} className="text-sm font-medium text-brand-600 hover:text-brand-700">Full analytics →</button>
+      </div>
+      {isLoading ? (
+        <div className="space-y-2 p-4">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-11" />)}</div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[640px] text-sm">
+            <thead>
+              <tr className="border-b border-slate-100 text-left text-[11px] uppercase tracking-wide text-slate-400 dark:border-slate-800">
+                <th className="px-5 py-2.5 font-bold">Organization</th>
+                <th className="px-4 py-2.5 text-right font-bold">Impressions</th>
+                <th className="px-4 py-2.5 text-right font-bold">New followers</th>
+                <th className="px-4 py-2.5 text-right font-bold">Engagement rate</th>
+                <th className="px-4 py-2.5 text-right font-bold">Total followers</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-50 dark:divide-slate-800/60">
+              {rows.map((o) => (
+                <tr key={o.organization._id} onClick={onOpen} className="cursor-pointer hover:bg-slate-50/60 dark:hover:bg-slate-800/30">
+                  <td className="px-5 py-2.5">
+                    <span className="flex items-center gap-2 font-semibold text-slate-700 dark:text-slate-200">
+                      <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: o.organization.color || '#94a3b8' }} />
+                      {o.organization.name}
+                    </span>
+                  </td>
+                  <td className="px-4 py-2.5 text-right font-bold text-slate-800 dark:text-white">{formatNumber(o.impressions)}</td>
+                  <td className="px-4 py-2.5 text-right font-bold text-emerald-600 dark:text-emerald-400">{o.newFollowers > 0 ? `+${formatNumber(o.newFollowers)}` : 0}</td>
+                  <td className="px-4 py-2.5 text-right font-bold text-slate-800 dark:text-white">{o.engagementRate ? `${o.engagementRate.toFixed(2)}%` : '—'}</td>
+                  <td className="px-4 py-2.5 text-right font-semibold text-slate-500 dark:text-slate-400">{o.followers ? formatNumber(o.followers) : '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Card>
   );
 }
 

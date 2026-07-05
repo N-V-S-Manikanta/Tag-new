@@ -142,6 +142,42 @@ export const getAnalyticsOverview = asyncHandler(async (req, res) => {
   res.json({ success: true, platforms, organizations });
 });
 
+// @route GET /api/analytics/pulse — the three headline LinkedIn numbers per
+// organization over the last 15 days (impressions, new followers, engagement
+// rate) plus the audience total. One call powers the dashboard pulse cards.
+// Windows are anchored per metric, same as the LinkedIn view.
+export const getAnalyticsPulse = asyncHandler(async (req, res) => {
+  const DAYS = 15;
+  const orgs = await Organization.find({ isActive: true }).select('name color logo').sort({ name: 1 }).lean();
+  const organizations = await Promise.all(orgs.map(async (org) => {
+    const snaps = await Analytics.find({ organization: org._id, platform: 'LinkedIn' }).sort({ date: -1 }).limit(500).lean();
+    const base = { organization: { _id: org._id, name: org.name, color: org.color, logo: org.logo } };
+    if (!snaps.length) return { ...base, hasData: false };
+
+    const windowSum = (anchorField, sum) => {
+      const anchor = snaps.find((s) => (s[anchorField] || 0) > 0) || snaps[0];
+      const end = new Date(anchor.date).getTime();
+      const rows = snaps.filter((s) => { const t = new Date(s.date).getTime(); return t <= end && t > end - DAYS * 86400000; });
+      return sum(rows);
+    };
+    const { impressions, engagements } = windowSum('impressions', (rows) => ({
+      impressions: rows.reduce((a, s) => a + (s.impressions || 0), 0),
+      engagements: rows.reduce((a, s) => a + (s.clicks || 0) + (s.reactions || 0) + (s.comments || 0) + (s.reposts || 0), 0),
+    }));
+    const newFollowers = windowSum('newFollowers', (rows) => rows.reduce((a, s) => a + (s.newFollowers || 0), 0));
+    const followers = snaps.find((s) => (s.followers || 0) > 0)?.followers || 0;
+    return {
+      ...base,
+      hasData: true,
+      followers,
+      impressions,
+      newFollowers,
+      engagementRate: impressions > 0 ? +((engagements / impressions) * 100).toFixed(2) : 0,
+    };
+  }));
+  res.json({ success: true, days: DAYS, platform: 'LinkedIn', organizations });
+});
+
 // @route GET /api/analytics/:platform/report — rich report: latest, previous, WoW deltas, series
 export const getPlatformReport = asyncHandler(async (req, res) => {
   const orgId = resolveViewOrgId(req); // any user may view any org

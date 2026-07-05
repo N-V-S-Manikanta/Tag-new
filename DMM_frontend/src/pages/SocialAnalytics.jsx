@@ -5,7 +5,7 @@ import { analyticsApi, organizationApi } from '../api/endpoints.js';
 import { useAuthStore } from '../store/authStore.js';
 import PageHeader from '../components/layout/PageHeader.jsx';
 import AnalyticsReport from '../components/AnalyticsReport.jsx';
-import CompetitorBenchmark from '../components/CompetitorBenchmark.jsx';
+import LinkedInView from '../components/LinkedInView.jsx';
 import { cn } from '../lib/utils.js';
 
 const PLATFORMS = [
@@ -23,7 +23,14 @@ export default function SocialAnalytics() {
 
   const { data: orgData } = useQuery({ queryKey: ['org-options'], queryFn: organizationApi.options });
   const orgs = orgData?.organizations || [];
-  const { data: report, isLoading } = useQuery({ queryKey: ['report', platform, orgId], queryFn: () => analyticsApi.report(platform, orgId) });
+  const isLinkedIn = platform === 'LinkedIn';
+  const { data: report, isLoading } = useQuery({
+    queryKey: ['report', platform, orgId],
+    queryFn: () => analyticsApi.report(platform, orgId),
+    enabled: !isLinkedIn, // the LinkedIn view fetches its own ranged report
+  });
+  // Uploading LinkedIn exports is for admins; regular users get the full view read-only.
+  const canUpload = user?.role === 'ADMIN' || user?.role === 'CEO';
 
   return (
     <div>
@@ -43,8 +50,11 @@ export default function SocialAnalytics() {
           {orgs.map((o) => <option key={o._id} value={o._id}>{o.name}</option>)}
         </select>
       </div>
-      <AnalyticsReport report={report} isLoading={isLoading} />
-      {platform === 'LinkedIn' && <CompetitorBenchmark platform={platform} />}
+      {isLinkedIn ? (
+        <LinkedInView orgId={orgId} canUpload={canUpload} />
+      ) : (
+        <AnalyticsReport report={report} isLoading={isLoading} />
+      )}
     </div>
   );
 }

@@ -1,0 +1,507 @@
+import { useMemo, useRef, useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import toast from 'react-hot-toast';
+import {
+  ResponsiveContainer, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, LabelList,
+} from 'recharts';
+import {
+  Linkedin, Upload, FileSpreadsheet, Newspaper, Users, Eye, Trophy, SearchCheck, Magnet,
+  ExternalLink, ArrowUpDown, Search, X, CheckCircle2,
+} from 'lucide-react';
+import { analyticsApi, linkedinApi } from '../api/endpoints.js';
+import { DeltaBadge } from './AnalyticsReport.jsx';
+import { Button } from './ui/Button.jsx';
+import { Card, Skeleton, EmptyState } from './ui/primitives.jsx';
+import { cn, formatNumber, formatDate } from '../lib/utils.js';
+
+const LI_BLUE = '#0A66C2';
+
+const TABS = [
+  { key: 'content', label: 'Content', icon: Newspaper },
+  { key: 'visitors', label: 'Visitors', icon: Eye },
+  { key: 'followers', label: 'Followers', icon: Users },
+  { key: 'competitors', label: 'Competitors', icon: Trophy },
+  { key: 'search', label: 'Search appearances', icon: SearchCheck },
+  { key: 'leads', label: 'Leads', icon: Magnet },
+];
+
+const RANGES = [
+  { value: 7, label: 'Past 7 days' },
+  { value: 14, label: 'Past 14 days' },
+  { value: 28, label: 'Past 28 days' },
+  { value: 90, label: 'Past 90 days' },
+];
+
+const fmtDate = (d) => new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+const fmt = (v, isPct) => (isPct ? `${Number(v || 0).toFixed(2)}%` : formatNumber(v || 0));
+
+// LinkedIn-style analytics for one organization: fed by uploading LinkedIn's
+// own export files (Content / Visitors / Followers / Competitors) and laid out
+// to mirror the sections of LinkedIn page analytics.
+export default function LinkedInView({ orgId, canUpload = true }) {
+  const qc = useQueryClient();
+  const [tab, setTab] = useState('content');
+  const [range, setRange] = useState(28);
+
+  const { data: report, isLoading: repLoading } = useQuery({
+    queryKey: ['report', orgId, 'LinkedIn', range],
+    queryFn: () => analyticsApi.report('LinkedIn', orgId, range),
+  });
+  const { data: dash, isLoading: dashLoading } = useQuery({
+    queryKey: ['linkedin-dash', orgId],
+    queryFn: () => linkedinApi.dashboard(orgId),
+  });
+
+  const refresh = () => {
+    qc.invalidateQueries({ queryKey: ['report', orgId, 'LinkedIn'] });
+    qc.invalidateQueries({ queryKey: ['linkedin-dash', orgId] });
+  };
+
+  // Daily series clipped to the selected window (charts show the range only).
+  const series = useMemo(() => {
+    const all = report?.series || [];
+    if (!all.length) return [];
+    const cutoff = new Date(all[all.length - 1].date).getTime() - range * 86400000;
+    return all.filter((s) => new Date(s.date).getTime() > cutoff).map((s) => ({ ...s, x: fmtDate(s.date) }));
+  }, [report, range]);
+
+  const totals = report?.weekly?.current || {};
+  const deltas = report?.weekly?.deltas || {};
+  const latest = report?.latest || {};
+  const isLoading = repLoading || dashLoading;
+
+  return (
+    <div className="space-y-5">
+      {/* LinkedIn-style header bar */}
+      <Card className="flex flex-wrap items-center justify-between gap-3 p-3">
+        <div className="flex items-center gap-2 pl-1">
+          <span className="flex h-8 w-8 items-center justify-center rounded-lg text-white" style={{ background: LI_BLUE }}><Linkedin className="h-4.5 w-4.5" /></span>
+          <span className="text-sm font-bold text-slate-700 dark:text-slate-200">LinkedIn analytics</span>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <select value={range} onChange={(e) => setRange(Number(e.target.value))} className="input-base h-9 w-auto py-1 text-sm font-semibold">
+            {RANGES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+          </select>
+          {canUpload && <UploadButton orgId={orgId} onDone={refresh} />}
+        </div>
+      </Card>
+
+      {/* Section tabs — mirrors LinkedIn's analytics nav */}
+      <div className="flex flex-wrap gap-1.5">
+        {TABS.map(({ key, label, icon: Icon }) => (
+          <button key={key} onClick={() => setTab(key)}
+            className={cn('flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-sm font-semibold transition',
+              tab === key
+                ? 'border-transparent text-white shadow-soft'
+                : 'border-slate-200 text-slate-600 hover:border-[#0A66C2]/40 hover:text-[#0A66C2] dark:border-slate-700 dark:text-slate-300')}
+            style={tab === key ? { background: LI_BLUE } : undefined}>
+            <Icon className="h-4 w-4" /> {label}
+          </button>
+        ))}
+      </div>
+
+      {isLoading ? (
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-28" />)}</div>
+          <Skeleton className="h-80" />
+        </div>
+      ) : (
+        <>
+          {tab === 'content' && <ContentTab totals={totals} deltas={deltas} series={series} posts={dash?.posts || []} range={range} hasData={report?.hasData} />}
+          {tab === 'visitors' && <VisitorsTab totals={totals} deltas={deltas} series={series} demographics={dash?.demographics?.visitors || {}} range={range} />}
+          {tab === 'followers' && <FollowersTab totals={totals} deltas={deltas} latest={latest} series={series} demographics={dash?.demographics?.followers || {}} range={range} />}
+          {tab === 'competitors' && <CompetitorsTab competitors={dash?.competitors || []} latest={latest} />}
+          {tab === 'search' && <SimpleMetricTab title="Search appearances" description="How often the page appeared in LinkedIn search results." field="searchAppearances" totals={totals} deltas={deltas} series={series} range={range} />}
+          {tab === 'leads' && <LeadsTab totals={totals} deltas={deltas} series={series} range={range} />}
+        </>
+      )}
+    </div>
+  );
+}
+
+// ---- Upload ----
+function UploadButton({ orgId, onDone }) {
+  const fileRef = useRef(null);
+  const [result, setResult] = useState(null);
+  const importMut = useMutation({
+    mutationFn: async (files) => {
+      const all = [];
+      for (const f of files) {
+        const res = await linkedinApi.import(orgId, f);
+        all.push(res);
+      }
+      return all;
+    },
+    onSuccess: (all) => {
+      const sheets = all.flatMap((r) => r.sheets.filter((s) => s.kind !== 'skipped'));
+      toast.success(`Imported ${all.length} file${all.length > 1 ? 's' : ''} — ${sheets.reduce((a, s) => a + s.rows, 0)} rows across ${sheets.length} sheets`);
+      setResult(all);
+      onDone();
+    },
+    onError: (e) => toast.error(e.response?.data?.message || 'Import failed'),
+  });
+  const pick = (e) => {
+    const files = [...(e.target.files || [])];
+    e.target.value = '';
+    if (files.length) importMut.mutate(files);
+  };
+
+  return (
+    <>
+      <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" multiple className="hidden" onChange={pick} />
+      <Button size="sm" onClick={() => fileRef.current?.click()} loading={importMut.isPending} style={{ background: LI_BLUE }}>
+        <Upload className="h-4 w-4" /> Upload LinkedIn export
+      </Button>
+      {result && (
+        <div className="fixed bottom-5 right-5 z-50 w-80 rounded-2xl border border-slate-200 bg-white p-4 shadow-2xl dark:border-slate-700 dark:bg-slate-900">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="flex items-center gap-1.5 text-sm font-bold text-slate-800 dark:text-white"><CheckCircle2 className="h-4 w-4 text-emerald-500" /> Import complete</span>
+            <button onClick={() => setResult(null)} className="rounded p-1 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"><X className="h-4 w-4" /></button>
+          </div>
+          <div className="max-h-48 space-y-1 overflow-y-auto text-xs text-slate-500 dark:text-slate-400">
+            {result.flatMap((r) => r.sheets).map((s, i) => (
+              <p key={i} className={cn('flex justify-between gap-2', s.kind === 'skipped' && 'opacity-50')}>
+                <span className="truncate">{s.sheet}</span>
+                <span className="shrink-0 font-semibold">{s.kind === 'skipped' ? 'skipped' : `${s.rows} · ${s.kind}`}</span>
+              </p>
+            ))}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+// ---- Shared pieces ----
+function MetricCard({ label, value, delta, isPct, suffix }) {
+  return (
+    <Card className="p-4">
+      <p className="text-[13px] font-medium text-slate-400">{label}{suffix ? <span className="text-slate-300"> · {suffix}</span> : null}</p>
+      <p className="mt-1.5 text-[26px] font-extrabold tracking-tight text-slate-800 dark:text-white">{fmt(value, isPct)}</p>
+      {delta && <div className="mt-1.5"><DeltaBadge delta={delta} isPct={isPct} /></div>}
+    </Card>
+  );
+}
+
+function TrendChart({ series, field, label, color = LI_BLUE, height = 260 }) {
+  return (
+    <ResponsiveContainer width="100%" height={height}>
+      <AreaChart data={series} margin={{ left: -8, right: 8, top: 8 }}>
+        <defs>
+          <linearGradient id={`li-${field}`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="5%" stopColor={color} stopOpacity={0.25} />
+            <stop offset="95%" stopColor={color} stopOpacity={0} />
+          </linearGradient>
+        </defs>
+        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+        <XAxis dataKey="x" tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} minTickGap={24} />
+        <YAxis tick={{ fontSize: 12, fill: '#94a3b8' }} axisLine={false} tickLine={false} tickFormatter={(v) => formatNumber(v)} width={52} />
+        <Tooltip contentStyle={{ borderRadius: 12, fontSize: 13 }} formatter={(v) => formatNumber(v)} />
+        <Area type="monotone" dataKey={field} stroke={color} strokeWidth={2.5} fill={`url(#li-${field})`} name={label} />
+      </AreaChart>
+    </ResponsiveContainer>
+  );
+}
+
+// Horizontal demographic bars — like LinkedIn's follower/visitor demographics.
+function Demographics({ demographics, emptyHint }) {
+  const categories = Object.keys(demographics);
+  const [cat, setCat] = useState(categories[0]);
+  if (!categories.length) {
+    return <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-400 dark:bg-slate-800/40">{emptyHint}</p>;
+  }
+  const active = categories.includes(cat) ? cat : categories[0];
+  const rows = [...(demographics[active] || [])].sort((a, b) => b.value - a.value).slice(0, 10);
+  const max = rows[0]?.value || 1;
+  return (
+    <div>
+      <div className="mb-4 flex flex-wrap gap-1.5">
+        {categories.map((c) => (
+          <button key={c} onClick={() => setCat(c)}
+            className={cn('rounded-full border px-3 py-1 text-xs font-semibold transition',
+              active === c ? 'border-transparent text-white' : 'border-slate-200 text-slate-500 dark:border-slate-700 dark:text-slate-300')}
+            style={active === c ? { background: LI_BLUE } : undefined}>
+            {c}
+          </button>
+        ))}
+      </div>
+      <div className="space-y-2.5">
+        {rows.map((r) => (
+          <div key={r.label}>
+            <div className="mb-1 flex items-center justify-between text-sm">
+              <span className="truncate pr-3 font-medium text-slate-600 dark:text-slate-300">{r.label}</span>
+              <span className="shrink-0 font-semibold text-slate-700 dark:text-slate-200">{r.isPercent ? `${r.value}%` : formatNumber(r.value)}</span>
+            </div>
+            <div className="h-2.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+              <div className="h-full rounded-full" style={{ width: `${Math.max(2, (r.value / max) * 100)}%`, background: LI_BLUE }} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ---- Content ----
+const CONTENT_METRICS = [
+  { field: 'impressions', label: 'Impressions' },
+  { field: 'uniqueImpressions', label: 'Unique impressions' },
+  { field: 'clicks', label: 'Clicks' },
+  { field: 'reactions', label: 'Reactions' },
+  { field: 'comments', label: 'Comments' },
+  { field: 'reposts', label: 'Reposts' },
+  { field: 'engagementRate', label: 'Engagement rate', pct: true },
+];
+
+function ContentTab({ totals, deltas, series, posts, range, hasData }) {
+  const [chartField, setChartField] = useState('impressions');
+  const active = CONTENT_METRICS.find((m) => m.field === chartField) || CONTENT_METRICS[0];
+
+  if (!hasData && !posts.length) {
+    return <EmptyState icon={FileSpreadsheet} title="No LinkedIn data yet" description='Open your LinkedIn page → Analytics → Content → Export, then click "Upload LinkedIn export" above and drop the downloaded file here.' />;
+  }
+
+  return (
+    <div className="space-y-5">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <MetricCard label="Impressions" suffix={`${range}d`} value={totals.impressions} delta={deltas.impressions} />
+        <MetricCard label="Clicks" suffix={`${range}d`} value={totals.clicks} delta={deltas.clicks} />
+        <MetricCard label="Reactions" suffix={`${range}d`} value={totals.reactions} delta={deltas.reactions} />
+        <MetricCard label="Engagement rate" value={totals.engagementRate} delta={deltas.engagementRate} isPct />
+      </div>
+
+      <Card className="p-5">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+          <h3 className="font-bold text-slate-800 dark:text-white">Metrics</h3>
+          <select className="input-base h-9 w-auto py-1 text-xs" value={active.field} onChange={(e) => setChartField(e.target.value)}>
+            {CONTENT_METRICS.map((m) => <option key={m.field} value={m.field}>{m.label}</option>)}
+          </select>
+        </div>
+        <TrendChart series={series} field={active.field} label={active.label} />
+      </Card>
+
+      <PostsTable posts={posts} />
+    </div>
+  );
+}
+
+function PostsTable({ posts }) {
+  const [search, setSearch] = useState('');
+  const [sort, setSort] = useState({ key: 'createdDate', dir: 'desc' });
+  const rows = useMemo(() => {
+    let list = posts.filter((p) => (p.title || '').toLowerCase().includes(search.toLowerCase()));
+    list = [...list].sort((a, b) => {
+      const av = sort.key === 'createdDate' ? new Date(a.createdDate || 0).getTime() : (a[sort.key] || 0);
+      const bv = sort.key === 'createdDate' ? new Date(b.createdDate || 0).getTime() : (b[sort.key] || 0);
+      return sort.dir === 'desc' ? bv - av : av - bv;
+    });
+    return list.slice(0, 50);
+  }, [posts, search, sort]);
+
+  const COLS = [
+    { key: 'impressions', label: 'Impressions' },
+    { key: 'clicks', label: 'Clicks' },
+    { key: 'clickThroughRate', label: 'CTR', pct: true },
+    { key: 'reactions', label: 'Reactions' },
+    { key: 'comments', label: 'Comments' },
+    { key: 'reposts', label: 'Reposts' },
+    { key: 'engagementRate', label: 'Eng. rate', pct: true },
+  ];
+  const toggle = (key) => setSort((s) => (s.key === key ? { key, dir: s.dir === 'desc' ? 'asc' : 'desc' } : { key, dir: 'desc' }));
+
+  return (
+    <Card className="overflow-hidden p-0">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 p-4 dark:border-slate-800">
+        <h3 className="font-bold text-slate-800 dark:text-white">Post performance <span className="text-sm font-normal text-slate-400">({posts.length} posts)</span></h3>
+        <div className="relative w-full max-w-[220px]">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search posts…" className="input-base h-9 pl-9 text-sm" />
+        </div>
+      </div>
+      {rows.length === 0 ? (
+        <p className="p-6 text-sm text-slate-400">No posts yet — upload the LinkedIn <span className="font-semibold">Content</span> export (it includes the "All posts" sheet).</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[900px] text-sm">
+            <thead>
+              <tr className="border-b border-slate-100 text-left text-[11px] uppercase tracking-wide text-slate-400 dark:border-slate-800">
+                <th className="cursor-pointer px-4 py-3 font-bold" onClick={() => toggle('createdDate')}>Post <ArrowUpDown className="ml-0.5 inline h-3 w-3" /></th>
+                {COLS.map((c) => (
+                  <th key={c.key} className="cursor-pointer whitespace-nowrap px-3 py-3 text-right font-bold" onClick={() => toggle(c.key)}>
+                    {c.label} <ArrowUpDown className={cn('ml-0.5 inline h-3 w-3', sort.key === c.key ? 'text-[#0A66C2]' : 'text-slate-300')} />
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-50 dark:divide-slate-800/60">
+              {rows.map((p) => (
+                <tr key={p._id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/30">
+                  <td className="max-w-[320px] px-4 py-3">
+                    <div className="flex items-start gap-2">
+                      <div className="min-w-0">
+                        <p className="truncate font-semibold text-slate-800 dark:text-white" title={p.title}>{p.title || '(untitled post)'}</p>
+                        <p className="text-xs text-slate-400">
+                          {p.createdDate ? formatDate(p.createdDate) : ''}{p.contentType ? ` · ${p.contentType}` : ''}{p.postType ? ` · ${p.postType}` : ''}
+                        </p>
+                      </div>
+                      {p.url && <a href={p.url} target="_blank" rel="noreferrer" className="mt-0.5 shrink-0 text-slate-300 hover:text-[#0A66C2]" title="Open on LinkedIn"><ExternalLink className="h-3.5 w-3.5" /></a>}
+                    </div>
+                  </td>
+                  {COLS.map((c) => (
+                    <td key={c.key} className="whitespace-nowrap px-3 py-3 text-right font-semibold text-slate-700 dark:text-slate-200">
+                      {fmt(p[c.key], c.pct)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+// ---- Visitors ----
+function VisitorsTab({ totals, deltas, series, demographics, range }) {
+  return (
+    <div className="space-y-5">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <MetricCard label="Page views" suffix={`${range}d`} value={totals.pageViews} delta={deltas.pageViews} />
+        <MetricCard label="Unique visitors" suffix={`${range}d`} value={totals.uniqueVisitors} delta={deltas.uniqueVisitors} />
+        <MetricCard label="Desktop views" suffix={`${range}d`} value={totals.desktopPageViews} delta={deltas.desktopPageViews} />
+        <MetricCard label="Custom button clicks" suffix={`${range}d`} value={totals.customButtonClicks} delta={deltas.customButtonClicks} />
+      </div>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card className="p-5">
+          <h3 className="mb-4 font-bold text-slate-800 dark:text-white">Page views</h3>
+          <TrendChart series={series} field="pageViews" label="Page views" />
+        </Card>
+        <Card className="p-5">
+          <h3 className="mb-4 font-bold text-slate-800 dark:text-white">Visitor demographics</h3>
+          <Demographics demographics={demographics} emptyHint="Upload the LinkedIn Visitors export to see who is viewing the page (location, job function, industry…)." />
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+// ---- Followers ----
+function FollowersTab({ totals, deltas, latest, series, demographics, range }) {
+  return (
+    <div className="space-y-5">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <MetricCard label="Total followers" value={latest.followers} delta={deltas.followers} />
+        <MetricCard label="New followers" suffix={`${range}d`} value={totals.newFollowers} delta={deltas.newFollowers} />
+        <MetricCard label="Organic followers" suffix={`${range}d`} value={totals.organicFollowers} delta={deltas.organicFollowers} />
+        <MetricCard label="Sponsored followers" suffix={`${range}d`} value={totals.sponsoredFollowers} delta={deltas.sponsoredFollowers} />
+      </div>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card className="p-5">
+          <h3 className="mb-4 font-bold text-slate-800 dark:text-white">Follower gains</h3>
+          <ResponsiveContainer width="100%" height={260}>
+            <BarChart data={series} margin={{ left: -8, right: 8, top: 20 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+              <XAxis dataKey="x" tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} minTickGap={24} />
+              <YAxis tick={{ fontSize: 12, fill: '#94a3b8' }} axisLine={false} tickLine={false} width={40} />
+              <Tooltip contentStyle={{ borderRadius: 12, fontSize: 13 }} />
+              <Bar dataKey="newFollowers" radius={[5, 5, 0, 0]} fill={LI_BLUE} name="New followers">
+                <LabelList dataKey="newFollowers" position="top" formatter={(v) => (v ? formatNumber(v) : '')} style={{ fontSize: 10, fontWeight: 600, fill: '#64748b' }} />
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </Card>
+        <Card className="p-5">
+          <h3 className="mb-4 font-bold text-slate-800 dark:text-white">Follower demographics</h3>
+          <Demographics demographics={demographics} emptyHint="Upload the LinkedIn Followers export to see follower demographics (location, job function, seniority, industry, company size)." />
+        </Card>
+      </div>
+      <Card className="p-5">
+        <h3 className="mb-4 font-bold text-slate-800 dark:text-white">Total followers</h3>
+        <TrendChart series={series} field="followers" label="Total followers" height={220} />
+      </Card>
+    </div>
+  );
+}
+
+// ---- Competitors ----
+function CompetitorsTab({ competitors, latest }) {
+  if (!competitors.length) {
+    return <EmptyState icon={Trophy} title="No competitor data yet" description='Open LinkedIn → Analytics → Competitors → Export, then upload the file with "Upload LinkedIn export".' />;
+  }
+  const rows = [
+    { _id: 'self', name: 'This page (you)', followers: latest.followers || 0, newFollowers: latest.newFollowers || 0, postsLast30Days: latest.postsPublished || 0, engagementRate: latest.engagementRate || 0, self: true },
+    ...competitors,
+  ].sort((a, b) => (b.followers || 0) - (a.followers || 0));
+
+  return (
+    <Card className="overflow-hidden p-0">
+      <div className="border-b border-slate-100 p-4 dark:border-slate-800">
+        <h3 className="font-bold text-slate-800 dark:text-white">Competitor benchmark</h3>
+        <p className="text-xs text-slate-400">From your LinkedIn competitor analytics export — ranked by followers.</p>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[640px] text-sm">
+          <thead>
+            <tr className="border-b border-slate-100 text-left text-[11px] uppercase tracking-wide text-slate-400 dark:border-slate-800">
+              <th className="px-4 py-3 font-bold">#</th>
+              <th className="px-4 py-3 font-bold">Page</th>
+              <th className="px-3 py-3 text-right font-bold">Total followers</th>
+              <th className="px-3 py-3 text-right font-bold">New followers</th>
+              <th className="px-3 py-3 text-right font-bold">Posts</th>
+              <th className="px-3 py-3 text-right font-bold">Eng. rate</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-50 dark:divide-slate-800/60">
+            {rows.map((c, i) => (
+              <tr key={c._id} className={cn(c.self && 'bg-[#0A66C2]/5 dark:bg-[#0A66C2]/10')}>
+                <td className="px-4 py-3 font-bold text-slate-400">{i + 1}</td>
+                <td className="px-4 py-3 font-semibold text-slate-800 dark:text-white">
+                  {c.name} {c.self && <span className="ml-1 rounded-full bg-[#0A66C2] px-2 py-0.5 text-[10px] font-bold text-white">YOU</span>}
+                </td>
+                <td className="px-3 py-3 text-right font-extrabold text-slate-800 dark:text-white">{formatNumber(c.followers || 0)}</td>
+                <td className="px-3 py-3 text-right font-semibold text-slate-600 dark:text-slate-300">{formatNumber(c.newFollowers || 0)}</td>
+                <td className="px-3 py-3 text-right font-semibold text-slate-600 dark:text-slate-300">{formatNumber(c.postsLast30Days || 0)}</td>
+                <td className="px-3 py-3 text-right font-semibold text-slate-600 dark:text-slate-300">{c.engagementRate ? `${Number(c.engagementRate).toFixed(2)}%` : '—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Card>
+  );
+}
+
+// ---- Search appearances / simple single-metric tabs ----
+function SimpleMetricTab({ title, description, field, totals, deltas, series, range }) {
+  return (
+    <div className="space-y-5">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <MetricCard label={title} suffix={`${range}d`} value={totals[field]} delta={deltas[field]} />
+      </div>
+      <Card className="p-5">
+        <h3 className="mb-1 font-bold text-slate-800 dark:text-white">{title}</h3>
+        <p className="mb-4 text-xs text-slate-400">{description} Enter it under “Enter metrics” or include it in an import — LinkedIn shows this number on the analytics home.</p>
+        <TrendChart series={series} field={field} label={title} />
+      </Card>
+    </div>
+  );
+}
+
+// ---- Leads ----
+function LeadsTab({ totals, deltas, series, range }) {
+  return (
+    <div className="space-y-5">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <MetricCard label="Leads" suffix={`${range}d`} value={totals.leads} delta={deltas.leads} />
+        <MetricCard label="Lead form views" suffix={`${range}d`} value={totals.leadFormViews} delta={deltas.leadFormViews} />
+        <MetricCard label="Lead conversion rate" value={totals.leadConversionRate} delta={deltas.leadConversionRate} isPct />
+      </div>
+      <Card className="p-5">
+        <h3 className="mb-1 font-bold text-slate-800 dark:text-white">Leads</h3>
+        <p className="mb-4 text-xs text-slate-400">Leads from LinkedIn lead-gen forms. Enter them under “Enter metrics” or include a Leads column in an import.</p>
+        <TrendChart series={series} field="leads" label="Leads" />
+      </Card>
+    </div>
+  );
+}

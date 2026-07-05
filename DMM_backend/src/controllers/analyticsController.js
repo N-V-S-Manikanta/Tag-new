@@ -370,7 +370,10 @@ const ANALYTICS_COLUMNS = [
   { field: 'uniqueImpressions', pats: [/uniqueimpression/] },
   { field: 'impressions', pats: [/impressionstotal/, /^impressions$/, /impressionsorganic/, /impression/] },
   { field: 'clickThroughRate', pats: [/clickthrough/, /ctr/], percent: true },
-  { field: 'linkClicks', pats: [/linkclick/] }, // before clicks so /click/ doesn't claim it
+  // Both must be claimed before the broad clicks patterns (/clickstotal/ would
+  // otherwise swallow "Custom button clicks (total)" from the Visitors export).
+  { field: 'customButtonClicks', pats: [/custombutton|buttonclick|ctaclick/] },
+  { field: 'linkClicks', pats: [/linkclick/] },
   { field: 'clicks', pats: [/clickstotal/, /^clicks$/, /clicksorganic/, /click/] },
   { field: 'engagementRate', pats: [/engagementratetotal/, /engagementrateorganic/, /engagementrate/, /engagement/], percent: true },
   { field: 'interactions', pats: [/totalinteraction/, /^interactions?$/, /interaction/] },
@@ -383,7 +386,6 @@ const ANALYTICS_COLUMNS = [
   { field: 'uniqueVisitors', pats: [/uniquevisitor/] },
   { field: 'pageViews', pats: [/totalpageview/, /pageviewstotal/, /pageview/] },
   { field: 'visits', pats: [/pagevisit|profilevisit/, /^visits?$/, /visit/] },
-  { field: 'customButtonClicks', pats: [/custombutton|buttonclick|ctaclick/] },
   { field: 'searchAppearances', pats: [/searchappearance/] },
   { field: 'leadFormViews', pats: [/leadform/] },
   { field: 'leadConversionRate', pats: [/leadconversion/], percent: true },
@@ -413,7 +415,7 @@ const buildAnalyticsColumns = (headerVals) => {
 
 // Parse a date cell: a real Date (exceljs date cells), MM/DD/YYYY (LinkedIn),
 // YYYY-MM-DD, or anything Date can parse. Returns a UTC midnight Date or null.
-const parseDateCell = (v) => {
+export const parseDateCell = (v) => {
   if (v instanceof Date && !isNaN(v)) return new Date(Date.UTC(v.getUTCFullYear(), v.getUTCMonth(), v.getUTCDate()));
   const s = cellText(v).trim();
   if (!s) return null;
@@ -425,21 +427,12 @@ const parseDateCell = (v) => {
   return isNaN(d) ? null : new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
 };
 
-// @route POST /api/analytics/import  (ADMIN/CEO) — import a daily analytics
-// export (one row per date). Columns are auto-detected, so the LinkedIn
-// "Engagement", "Followers", "Visitors" etc. downloads all work. Each row is
-// upserted by date and only the columns present are written, so importing
-// several exports for the same dates merges them. Existing data is never removed.
-export const importAnalytics = asyncHandler(async (req, res) => {
-  const orgId = requireOrgId(req, res);
-  const platform = req.body.platform || 'LinkedIn';
-  if (!PLATFORMS.includes(platform)) { res.status(400); throw new Error('Invalid platform'); }
-  if (!req.file) { res.status(400); throw new Error('No Excel file uploaded'); }
-
-  let grid;
-  try { grid = await loadGrid(req.file); }
-  catch { res.status(400); throw new Error('Could not read the file. Please upload a valid .xlsx Excel file.'); }
-
+// Ingest one grid of daily rows (a sheet with a Date column + metric columns)
+// into Analytics snapshots. Returns null when the grid has no such header, so
+// callers can probe arbitrary sheets. Only the columns present are written, so
+// several exports for the same dates merge. Reused by the LinkedIn multi-sheet
+// import (linkedinController).
+export const ingestDailyGrid = async (grid, orgId, platform) => {
   // Find the header row — first row with a Date column and at least one metric.
   let headerRow = -1;
   let map = null;
@@ -447,10 +440,7 @@ export const importAnalytics = asyncHandler(async (req, res) => {
     const m = buildAnalyticsColumns(grid[i]);
     if (m.date != null && Object.keys(m).length >= 2) { headerRow = i; map = m; break; }
   }
-  if (!map) {
-    res.status(400);
-    throw new Error('Could not detect the columns. The sheet needs a header row with a "Date" column and metric columns.');
-  }
+  if (!map) return null;
 
   const metricFields = Object.keys(map).filter((f) => f !== 'date');
   let created = 0;
@@ -480,8 +470,31 @@ export const importAnalytics = asyncHandler(async (req, res) => {
     if (!minDate || date < minDate) minDate = date;
     if (!maxDate || date > maxDate) maxDate = date;
   }
+  return { days: created + updated, created, updated, minDate, maxDate, mappedFields: metricFields };
+};
 
-  if (created + updated === 0) { res.status(400); throw new Error('No dated rows found under the header.'); }
+// @route POST /api/analytics/import  (ADMIN/CEO) — import a daily analytics
+// export (one row per date). Columns are auto-detected, so the LinkedIn
+// "Engagement", "Followers", "Visitors" etc. downloads all work. Each row is
+// upserted by date and only the columns present are written, so importing
+// several exports for the same dates merges them. Existing data is never removed.
+export const importAnalytics = asyncHandler(async (req, res) => {
+  const orgId = requireOrgId(req, res);
+  const platform = req.body.platform || 'LinkedIn';
+  if (!PLATFORMS.includes(platform)) { res.status(400); throw new Error('Invalid platform'); }
+  if (!req.file) { res.status(400); throw new Error('No Excel file uploaded'); }
+
+  let grid;
+  try { grid = await loadGrid(req.file); }
+  catch { res.status(400); throw new Error('Could not read the file. Please upload a valid .xlsx Excel file.'); }
+
+  const result = await ingestDailyGrid(grid, orgId, platform);
+  if (!result) {
+    res.status(400);
+    throw new Error('Could not detect the columns. The sheet needs a header row with a "Date" column and metric columns.');
+  }
+  const { days, created, updated, minDate, maxDate, mappedFields: metricFields } = result;
+  if (days === 0) { res.status(400); throw new Error('No dated rows found under the header.'); }
 
   const fmt = (d) => (d ? d.toISOString().slice(0, 10) : null);
   logActivity({ user: req.user._id, organization: orgId, action: ACTIVITY_ACTIONS.ANALYTICS_UPDATED, description: `Imported ${created + updated} days of ${platform} analytics from Excel (${fmt(minDate)} → ${fmt(maxDate)})`, entityType: 'Analytics' });

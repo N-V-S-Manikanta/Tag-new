@@ -30,8 +30,18 @@ export const userApi = {
 // Social analytics — auto-scoped to the logged-in user's organization.
 export const analyticsApi = {
   get: (organizationId) => api.get('/analytics', { params: { organizationId } }).then((r) => r.data),
-  report: (platform, organizationId) => api.get(`/analytics/${platform}/report`, { params: { organizationId } }).then((r) => r.data),
+  report: (platform, organizationId, range) => api.get(`/analytics/${platform}/report`, { params: { organizationId, range } }).then((r) => r.data),
   history: (platform, organizationId) => api.get(`/analytics/${platform}/history`, { params: { organizationId } }).then((r) => r.data),
+};
+
+// LinkedIn export hub — dashboard for everyone; uploads for CEO/Admin.
+export const linkedinApi = {
+  dashboard: (organizationId, days) => api.get('/linkedin/dashboard', { params: { organizationId, days } }).then((r) => r.data),
+  import: (organizationId, file) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    return api.post('/linkedin/import', fd, { params: { organizationId }, headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
+  },
 };
 
 // ---- Organizations (options for pickers — any authenticated user) ----

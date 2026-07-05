@@ -30,6 +30,7 @@ import linkRoutes from './routes/linkRoutes.js';
 import goalRoutes from './routes/goalRoutes.js';
 import planRoutes from './routes/planRoutes.js';
 import aiRoutes from './routes/aiRoutes.js';
+import linkedinRoutes from './routes/linkedinRoutes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -80,6 +81,7 @@ app.use('/api/link-preview', linkRoutes);
 app.use('/api/goals', goalRoutes);
 app.use('/api/plans', planRoutes);
 app.use('/api/ai', aiRoutes);
+app.use('/api/linkedin', linkedinRoutes);
 app.use('/api/competitors', competitorRoutes);
 app.use('/api/purchases', purchaseRoutes);
 app.use('/api/brand', brandAssetRoutes);

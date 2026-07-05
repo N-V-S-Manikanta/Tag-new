@@ -56,6 +56,17 @@ export const analyticsApi = {
   template: () => api.get('/analytics/template', { responseType: 'blob' }).then((r) => r.data),
 };
 
+// LinkedIn export hub — upload any LinkedIn analytics download (Content,
+// Visitors, Followers, Competitors); sheets are auto-detected server-side.
+export const linkedinApi = {
+  dashboard: (organizationId, days) => api.get('/linkedin/dashboard', { params: { organizationId, days } }).then((r) => r.data),
+  import: (organizationId, file) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    return api.post('/linkedin/import', fd, { params: { organizationId }, headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
+  },
+};
+
 // Meta (Facebook + Instagram) live sync. The master token lives only on the
 // backend (env) — these endpoints never see or carry it.
 export const metaApi = {

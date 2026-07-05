@@ -38,15 +38,24 @@ export const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&
 // Load the first worksheet of an uploaded file into 1-indexed value arrays
 // (index 0 of each row is empty — exceljs convention).
 export const loadGrid = async (file) => {
+  const grids = await loadAllGrids(file);
+  return grids[0].grid;
+};
+
+// Load EVERY worksheet of an uploaded file: [{ name, grid }] in sheet order.
+// LinkedIn's analytics exports are multi-sheet (e.g. "Metrics" + "All posts",
+// or "New followers" + demographic breakdowns), so imports must see them all.
+export const loadAllGrids = async (file) => {
   const wb = new ExcelJS.Workbook();
   const isCsv = /\.csv$/i.test(file.originalname || '') || file.mimetype === 'text/csv';
   if (isCsv) await wb.csv.read(Readable.from(file.buffer));
   else await wb.xlsx.load(file.buffer);
-  const ws = wb.worksheets[0];
-  if (!ws) throw new Error('The file has no sheets.');
-  const grid = [];
-  ws.eachRow({ includeEmpty: false }, (row) => { grid.push(row.values); });
-  return grid;
+  if (!wb.worksheets.length) throw new Error('The file has no sheets.');
+  return wb.worksheets.map((ws) => {
+    const grid = [];
+    ws.eachRow({ includeEmpty: false }, (row) => { grid.push(row.values); });
+    return { name: ws.name || '', grid };
+  });
 };
 
 // Find the header row and a { field: columnIndex } map. `matchers` is an ordered

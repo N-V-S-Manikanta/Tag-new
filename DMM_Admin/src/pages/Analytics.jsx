@@ -8,6 +8,7 @@ import { useOrgStore } from '../store/orgStore.js';
 import PageHeader from '../components/layout/PageHeader.jsx';
 import OrgPicker from '../components/OrgPicker.jsx';
 import AnalyticsReport from '../components/AnalyticsReport.jsx';
+import LinkedInView from '../components/LinkedInView.jsx';
 import CompetitorManager from '../components/CompetitorManager.jsx';
 import OrgCompare from '../components/OrgCompare.jsx';
 import AnalyticsOverview from '../components/AnalyticsOverview.jsx';
@@ -67,7 +68,9 @@ const RANGES = [
 function OrgAnalytics({ orgId, initialPlatform }) {
   const qc = useQueryClient();
   const [platform, setPlatform] = useState(initialPlatform || 'LinkedIn');
-  const [mode, setMode] = useState('report');
+  // LinkedIn opens in the LinkedIn-mirror view (fed by LinkedIn's own exports);
+  // every other platform opens in the standard report.
+  const [mode, setMode] = useState((initialPlatform || 'LinkedIn') === 'LinkedIn' ? 'linkedin' : 'report');
   const [range, setRange] = useState(7);
   const fileRef = useRef(null);
   const { data: report, isLoading } = useQuery({ queryKey: ['report', orgId, platform, range], queryFn: () => analyticsApi.report(platform, orgId, range) });
@@ -77,7 +80,8 @@ function OrgAnalytics({ orgId, initialPlatform }) {
   const showCompetitors = platform === 'LinkedIn';
   const selectPlatform = (key) => {
     setPlatform(key);
-    if (key !== 'LinkedIn' && mode === 'competitors') setMode('report');
+    if (key === 'LinkedIn') setMode('linkedin');
+    else if (mode === 'competitors' || mode === 'linkedin') setMode('report');
   };
 
   const importMut = useMutation({
@@ -115,9 +119,14 @@ function OrgAnalytics({ orgId, initialPlatform }) {
               {RANGES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
             </select>
           )}
-          <Button size="sm" variant="outline" onClick={downloadTemplate}><Download className="h-4 w-4" /> Template</Button>
-          <Button size="sm" variant="outline" onClick={() => fileRef.current?.click()} loading={importMut.isPending}><Upload className="h-4 w-4" /> Import Excel</Button>
+          {mode !== 'linkedin' && (
+            <>
+              <Button size="sm" variant="outline" onClick={downloadTemplate}><Download className="h-4 w-4" /> Template</Button>
+              <Button size="sm" variant="outline" onClick={() => fileRef.current?.click()} loading={importMut.isPending}><Upload className="h-4 w-4" /> Import Excel</Button>
+            </>
+          )}
           <div className="inline-flex rounded-xl bg-slate-100 dark:bg-slate-800 p-1">
+            {platform === 'LinkedIn' && <TabBtn active={mode === 'linkedin'} onClick={() => setMode('linkedin')} icon={Linkedin}>LinkedIn view</TabBtn>}
             <TabBtn active={mode === 'report'} onClick={() => setMode('report')} icon={BarChart3}>Report</TabBtn>
             <TabBtn active={mode === 'enter'} onClick={() => setMode('enter')} icon={PenLine}>Enter metrics</TabBtn>
             {showCompetitors && <TabBtn active={mode === 'competitors'} onClick={() => setMode('competitors')} icon={Users}>Competitors</TabBtn>}
@@ -125,14 +134,16 @@ function OrgAnalytics({ orgId, initialPlatform }) {
         </div>
       </div>
 
-      <div className="flex items-start gap-2.5 rounded-xl border border-slate-200/70 bg-slate-50 px-4 py-3 text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-800/40 dark:text-slate-400">
-        <FileSpreadsheet className="mt-0.5 h-4 w-4 shrink-0 text-brand-500" />
-        <span>
-          <span className="font-semibold text-slate-600 dark:text-slate-300">Weekly Excel import:</span> download your {platform} export
-          (Impressions, Clicks, Reactions, Comments, Reposts, Engagement rate, Followers…) and drop it here. Columns and dates are
-          detected automatically, each day is stored as a snapshot, and re-uploading the same dates updates them — your past data is never removed.
-        </span>
-      </div>
+      {mode !== 'linkedin' && (
+        <div className="flex items-start gap-2.5 rounded-xl border border-slate-200/70 bg-slate-50 px-4 py-3 text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-800/40 dark:text-slate-400">
+          <FileSpreadsheet className="mt-0.5 h-4 w-4 shrink-0 text-brand-500" />
+          <span>
+            <span className="font-semibold text-slate-600 dark:text-slate-300">Weekly Excel import:</span> download your {platform} export
+            (Impressions, Clicks, Reactions, Comments, Reposts, Engagement rate, Followers…) and drop it here. Columns and dates are
+            detected automatically, each day is stored as a snapshot, and re-uploading the same dates updates them — your past data is never removed.
+          </span>
+        </div>
+      )}
 
       {mode === 'report' && (platform === 'Instagram' || platform === 'Facebook') && (
         <MetaSync orgId={orgId} platform={platform} onSynced={() => qc.invalidateQueries({ queryKey: ['report', orgId, platform] })} />
@@ -141,6 +152,7 @@ function OrgAnalytics({ orgId, initialPlatform }) {
         <YoutubeSync orgId={orgId} onSynced={() => qc.invalidateQueries({ queryKey: ['report', orgId, platform] })} />
       )}
 
+      {mode === 'linkedin' && <LinkedInView orgId={orgId} />}
       {mode === 'report' && <AnalyticsReport report={report} isLoading={isLoading} />}
       {mode === 'enter' && <MetricEntry orgId={orgId} platform={platform} report={report} />}
       {mode === 'competitors' && <CompetitorManager orgId={orgId} platform={platform} />}

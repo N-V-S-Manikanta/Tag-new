@@ -209,11 +209,23 @@ function UploadZone({ orgId, onDone, dash, report }) {
     competitors: (dash?.competitors?.length || 0) > 0 ? `${dash.competitors.length} pages` : null,
   };
 
+  const cov = dash?.coverage;
   return (
     <Card className="p-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm font-bold text-slate-800 dark:text-white">Upload your 4 LinkedIn exports</p>
-        <p className="text-xs text-slate-400">Up to 365 days per file — the app breaks it into Past 7 / 14 / 28 / 30 / 90 / 180 / 365-day views automatically.</p>
+        <p className="text-sm font-bold text-slate-800 dark:text-white">
+          Upload your 4 LinkedIn exports
+          {dash?.organization?.name && (
+            <span className="ml-2 rounded-full px-2.5 py-0.5 text-[11px] font-bold text-white" style={{ background: dash.organization.color || LI_BLUE }}>
+              → {dash.organization.name}
+            </span>
+          )}
+        </p>
+        <p className="text-xs text-slate-400">
+          {cov
+            ? <>Data stored: <span className="font-semibold text-slate-500 dark:text-slate-300">{formatDate(cov.from)} → {formatDate(cov.to)}</span> ({cov.days} days) · last import {formatDate(cov.lastImport)} — weekly uploads merge on top automatically.</>
+            : 'Start with the last 365 days, then add each Monday’s weekly export — everything merges by date automatically.'}
+        </p>
       </div>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {UPLOAD_SLOTS.map((slot) => (

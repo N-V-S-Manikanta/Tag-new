@@ -1,4 +1,6 @@
 import asyncHandler from 'express-async-handler';
+import mongoose from 'mongoose';
+import Organization from '../models/Organization.js';
 import Analytics from '../models/Analytics.js';
 import LinkedInPost from '../models/LinkedInPost.js';
 import AudienceDemographic from '../models/AudienceDemographic.js';
@@ -275,11 +277,18 @@ export const linkedinDashboard = asyncHandler(async (req, res) => {
   const days = Math.min(Math.max(Number(req.query.days) || 365, 7), 730);
   const since = new Date(Date.now() - days * 86400000);
 
-  const [posts, demographics, competitors] = await Promise.all([
+  const [org, posts, demographics, competitors, coverage] = await Promise.all([
+    Organization.findById(orgId).select('name color').lean(),
     LinkedInPost.find({ organization: orgId, $or: [{ createdDate: { $gte: since } }, { createdDate: null }] })
       .sort({ createdDate: -1 }).limit(200).lean(),
     AudienceDemographic.find({ organization: orgId, platform: 'LinkedIn' }).sort({ value: -1 }).lean(),
     Competitor.find({ organization: orgId, platform: 'LinkedIn' }).sort({ followers: -1 }).lean(),
+    // Stored data window + when it was last touched — lets the weekly-upload
+    // routine confirm at a glance that the new week landed.
+    Analytics.aggregate([
+      { $match: { organization: new mongoose.Types.ObjectId(String(orgId)), platform: 'LinkedIn' } },
+      { $group: { _id: null, from: { $min: '$date' }, to: { $max: '$date' }, days: { $sum: 1 }, lastImport: { $max: '$updatedAt' } } },
+    ]),
   ]);
 
   // Group demographics: { followers: { Location: [{label,value}…] }, visitors: {…} }
@@ -288,5 +297,8 @@ export const linkedinDashboard = asyncHandler(async (req, res) => {
     (demo[d.audience][d.category] = demo[d.audience][d.category] || []).push({ label: d.label, value: d.value, isPercent: d.isPercent });
   }
 
-  res.json({ success: true, days, posts, demographics: demo, competitors });
+  const cov = coverage[0]
+    ? { from: coverage[0].from, to: coverage[0].to, days: coverage[0].days, lastImport: coverage[0].lastImport }
+    : null;
+  res.json({ success: true, days, organization: org, coverage: cov, posts, demographics: demo, competitors });
 });

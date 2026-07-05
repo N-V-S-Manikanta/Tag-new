@@ -59,7 +59,8 @@ export default function LinkedInView({ orgId, canUpload = true }) {
   const [custom, setCustom] = useState({ from: '', to: '' });
 
   const isCustom = preset === 'custom';
-  const customReady = isCustom && custom.from && custom.to && custom.from <= custom.to;
+  // Must be a real boolean — react-query's `enabled` throws on anything else.
+  const customReady = !!(isCustom && custom.from && custom.to && custom.from <= custom.to);
   const anchor = TAB_ANCHOR[tab] || 'impressions';
   const { data: report, isLoading: repLoading } = useQuery({
     queryKey: ['report', orgId, 'LinkedIn', preset, anchor, customReady ? custom.from : '', customReady ? custom.to : ''],

@@ -365,6 +365,8 @@ export const recordAnalytics = asyncHandler(async (req, res) => {
 // @route DELETE /api/analytics?platform=LinkedIn  (ADMIN/CEO) — clear stored
 // metrics for an org so fresh numbers can be entered/imported. With a platform,
 // only that platform is cleared; without one, every platform for the org is.
+// Clearing LinkedIn also removes its export-derived data (post performance and
+// audience demographics) so a fresh upload starts from a truly clean slate.
 export const clearAnalytics = asyncHandler(async (req, res) => {
   const orgId = requireOrgId(req, res);
   const filter = { organization: orgId };
@@ -374,6 +376,12 @@ export const clearAnalytics = asyncHandler(async (req, res) => {
     filter.platform = platform;
   }
   const result = await Analytics.deleteMany(filter);
+  if (!platform || platform === 'LinkedIn') {
+    const { default: LinkedInPost } = await import('../models/LinkedInPost.js');
+    const { default: AudienceDemographic } = await import('../models/AudienceDemographic.js');
+    await LinkedInPost.deleteMany({ organization: orgId });
+    await AudienceDemographic.deleteMany({ organization: orgId, platform: 'LinkedIn' });
+  }
   logActivity({ user: req.user._id, organization: orgId, action: ACTIVITY_ACTIONS.ANALYTICS_UPDATED, description: `Cleared ${platform || 'all'} analytics (${result.deletedCount} entries)`, entityType: 'Analytics' });
   res.json({ success: true, deleted: result.deletedCount });
 });

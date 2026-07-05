@@ -372,27 +372,39 @@ const ANALYTICS_COLUMNS = [
   { field: 'clickThroughRate', pats: [/clickthrough/, /ctr/], percent: true },
   // Both must be claimed before the broad clicks patterns (/clickstotal/ would
   // otherwise swallow "Custom button clicks (total)" from the Visitors export).
-  { field: 'customButtonClicks', pats: [/custombutton|buttonclick|ctaclick/] },
+  // LinkedIn's Visitors export repeats button clicks per device — prefer the
+  // aggregate "(total)" column, fall back to any custom-button column.
+  { field: 'customButtonClicks', pats: [/^(total)?custombuttonclickstotal$/, /custombutton|buttonclick|ctaclick/] },
   { field: 'linkClicks', pats: [/linkclick/] },
-  { field: 'clicks', pats: [/clickstotal/, /^clicks$/, /clicksorganic/, /click/] },
+  // The broad fallback must never grab button/link/CTR click columns left over
+  // from the Visitors export (e.g. "Custom button clicks (desktop)").
+  { field: 'clicks', pats: [/^clickstotal$/, /^clicks$/, /clicksorganic/, /^(?!.*button)(?!.*link)(?!.*through).*click/] },
   { field: 'engagementRate', pats: [/engagementratetotal/, /engagementrateorganic/, /engagementrate/, /engagement/], percent: true },
   { field: 'interactions', pats: [/totalinteraction/, /^interactions?$/, /interaction/] },
   { field: 'reactions', pats: [/reactionstotal/, /reactionsorganic/, /reaction|likes/] },
   { field: 'comments', pats: [/commentstotal/, /commentsorganic/, /comment/] },
   { field: 'reposts', pats: [/repoststotal/, /repostsorganic/, /repost|share/] },
   { field: 'postsPublished', pats: [/postspublished/, /^posts$/, /^postscount$/] }, // not /posts/ — that matches "reposts"
-  { field: 'desktopPageViews', pats: [/desktoppageview/, /desktop/] },
-  { field: 'mobilePageViews', pats: [/mobilepageview/, /mobile/] },
-  { field: 'uniqueVisitors', pats: [/uniquevisitor/] },
-  { field: 'pageViews', pats: [/totalpageview/, /pageviewstotal/, /pageview/] },
-  { field: 'visits', pats: [/pagevisit|profilevisit/, /^visits?$/, /visit/] },
+  // LinkedIn's Visitors export has one column set PER PAGE TAB ("Overview page
+  // views (desktop)", "Life page views (mobile)", "Jobs …") plus the aggregate
+  // "Total page views/unique visitors (…)" columns. Anchored patterns claim the
+  // aggregates first so the report matches the numbers LinkedIn's UI shows;
+  // the loose patterns remain as fallbacks for simpler sheets.
+  { field: 'desktopPageViews', pats: [/^totalpageviewsdesktop$/, /desktoppageview/, /desktop/] },
+  { field: 'mobilePageViews', pats: [/^totalpageviewsmobile$/, /mobilepageview/, /mobile/] },
+  { field: 'uniqueVisitors', pats: [/^totaluniquevisitorstotal$/, /uniquevisitorstotal$/, /uniquevisitor/] },
+  { field: 'pageViews', pats: [/^totalpageviewstotal$/, /pageviewstotal$/, /totalpageview/, /pageview/] },
+  // Must not claim LinkedIn's "… unique visitors (…)" leftovers.
+  { field: 'visits', pats: [/pagevisit|profilevisit/, /^visits?$/, /^(?!.*visitor).*visit/] },
   { field: 'searchAppearances', pats: [/searchappearance/] },
   { field: 'leadFormViews', pats: [/leadform/] },
   { field: 'leadConversionRate', pats: [/leadconversion/], percent: true },
   { field: 'leads', pats: [/^leads?$/, /leadsgenerated|leadgen|leads/] },
   { field: 'reach', pats: [/reach/] },
   { field: 'subscribers', pats: [/subscriber/] },
-  { field: 'views', pats: [/^views$/, /videoview|views/] },
+  // Anchored/specific only — a broad /views/ would swallow LinkedIn's leftover
+  // per-tab "… page views (…)" columns.
+  { field: 'views', pats: [/^views$/, /^viewstotal$/, /videoview/, /^(?!.*page)(?!.*visitor)(?!.*impression).*views$/] },
   { field: 'watchHours', pats: [/watchhour|watchtime/] },
 ];
 const PERCENT_IMPORT = new Set(ANALYTICS_COLUMNS.filter((c) => c.percent).map((c) => c.field));

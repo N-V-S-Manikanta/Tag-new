@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { Youtube, RefreshCw, Plug, CheckCircle2, AlertTriangle, Link2 } from 'lucide-react';
@@ -6,14 +6,21 @@ import { youtubeApi } from '../api/endpoints.js';
 import { useAuthStore } from '../store/authStore.js';
 import { Button } from './ui/Button.jsx';
 import { Card } from './ui/primitives.jsx';
-import { cn } from '../lib/utils.js';
+import { cn, formatDate, formatNumber } from '../lib/utils.js';
+
+// Labels for the fields the sync can write, used until the report payload loads.
+const FALLBACK_LABELS = {
+  subscribers: 'Subscribers', views: 'Views', videoCount: 'Videos',
+  comments: 'Comments', engagementRate: 'Engagement Rate',
+};
 
 // Live YouTube sync panel, shown above the report on the YouTube tab. The API
 // key never reaches this component — it only calls the backend.
-export default function YoutubeSync({ orgId, onSynced }) {
+export default function YoutubeSync({ orgId, report, onSynced }) {
   const { user: me } = useAuthStore();
   const [linking, setLinking] = useState(false);
   const [q, setQ] = useState('');
+  const [lastSync, setLastSync] = useState(null);
 
   const { data: status, isLoading } = useQuery({ queryKey: ['yt', 'status'], queryFn: youtubeApi.status, staleTime: 60_000, retry: false });
   const { data: chData, refetch } = useQuery({ queryKey: ['yt', 'channel', orgId], queryFn: () => youtubeApi.channel(orgId), retry: false });
@@ -21,10 +28,15 @@ export default function YoutubeSync({ orgId, onSynced }) {
   const configured = status?.configured;
   const connected = status?.connected;
   const channel = chData?.channel;
+  const labels = report?.labels || FALLBACK_LABELS;
+  const pct = new Set(report?.percentFields || ['engagementRate']);
+
+  // A sync result belongs to one organization — clear it when the org changes.
+  useEffect(() => { setLastSync(null); }, [orgId]);
 
   const syncMut = useMutation({
     mutationFn: () => youtubeApi.sync(orgId),
-    onSuccess: (res) => { toast.success(`Synced YouTube — ${res.fields.length} metric${res.fields.length === 1 ? '' : 's'} from ${res.channel}`); onSynced?.(); },
+    onSuccess: (res) => { setLastSync(res); toast.success(`Synced YouTube — ${res.fields.length} metric${res.fields.length === 1 ? '' : 's'} from ${res.channel}`); onSynced?.(); },
     onError: (e) => toast.error(e.response?.data?.message || 'YouTube sync failed'),
   });
   const mapMut = useMutation({
@@ -55,6 +67,9 @@ export default function YoutubeSync({ orgId, onSynced }) {
               : channel ? <>Linked channel: <span className="font-semibold text-slate-600 dark:text-slate-300">{channel.title}</span></>
               : 'No channel linked to this organization yet.'}
           </p>
+          {report?.latest?.date && (
+            <p className="mt-0.5 text-[11px] text-slate-400">Data through {formatDate(report.latest.date)}</p>
+          )}
         </div>
       </div>
 
@@ -68,6 +83,18 @@ export default function YoutubeSync({ orgId, onSynced }) {
           <RefreshCw className="h-4 w-4" /> Sync from YouTube
         </Button>
       </div>
+
+      {/* What the last sync actually landed: one chip per written field. */}
+      {lastSync?.fields?.length > 0 && (
+        <div className="flex w-full flex-wrap items-center gap-1.5 border-t border-slate-100 pt-3 dark:border-slate-800">
+          <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Last sync wrote:</span>
+          {lastSync.fields.map((f) => (
+            <span key={f} className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400">
+              {labels[f] || f}: {pct.has(f) ? `${lastSync.metrics?.[f]}%` : formatNumber(lastSync.metrics?.[f])}
+            </span>
+          ))}
+        </div>
+      )}
 
       {linking && me?.isSuperAdmin && (
         <form onSubmit={(e) => { e.preventDefault(); if (q.trim()) mapMut.mutate(q.trim()); }} className="flex w-full flex-wrap items-center gap-2 border-t border-slate-100 pt-3 dark:border-slate-800">

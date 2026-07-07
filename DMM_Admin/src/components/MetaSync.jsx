@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { RefreshCw, Plug, CheckCircle2, AlertTriangle, Link2, Sparkles, Instagram, Facebook } from 'lucide-react';
@@ -7,7 +7,13 @@ import { useAuthStore } from '../store/authStore.js';
 import { Button } from './ui/Button.jsx';
 import { Modal } from './ui/Modal.jsx';
 import { Card } from './ui/primitives.jsx';
-import { cn } from '../lib/utils.js';
+import { cn, formatDate, formatNumber } from '../lib/utils.js';
+
+// Labels for the fields Meta can write, used until the report payload loads.
+const FALLBACK_LABELS = {
+  followers: 'Total Followers', newFollowers: 'New Followers', reach: 'Reach',
+  views: 'Views', interactions: 'Interactions', visits: 'Visits',
+};
 
 const PillConnected = () => (
   <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400"><CheckCircle2 className="h-3 w-3" />Connected</span>
@@ -22,17 +28,24 @@ const PillOff = () => (
 // Live Instagram/Facebook sync from Meta. Shown above the report for those two
 // platforms. The master token never reaches this component — it only calls the
 // backend, which reads the token from its environment.
-export default function MetaSync({ orgId, platform, onSynced }) {
+export default function MetaSync({ orgId, platform, report, onSynced }) {
   const { user: me } = useAuthStore();
   const [setupOpen, setSetupOpen] = useState(false);
+  const [lastSync, setLastSync] = useState(null);
   const { data: status, isLoading } = useQuery({ queryKey: ['meta', 'status'], queryFn: metaApi.status, staleTime: 60_000, retry: false });
 
   const connected = status?.connected;
   const configured = status?.configured;
+  const labels = report?.labels || FALLBACK_LABELS;
+
+  // The component instance is reused across Instagram <-> Facebook — a sync
+  // result belongs to one org + platform, so clear it when either changes.
+  useEffect(() => { setLastSync(null); }, [orgId, platform]);
 
   const syncMut = useMutation({
     mutationFn: () => metaApi.sync(orgId, platform),
     onSuccess: (res) => {
+      setLastSync(res);
       const w = res.written?.find((x) => x.platform === platform) || res.written?.[0];
       if (w) {
         toast.success(`Synced ${platform} from Meta — ${w.fields.length} live metric${w.fields.length === 1 ? '' : 's'} updated`);
@@ -65,6 +78,14 @@ export default function MetaSync({ orgId, platform, onSynced }) {
               : configured ? (status.message || 'Token present but not usable.')
               : 'Add META_SYSTEM_TOKEN to the backend .env to pull Instagram & Facebook automatically.'}
           </p>
+          {report?.latest?.date && (
+            <p className="mt-0.5 text-[11px] text-slate-400">Data through {formatDate(report.latest.date)}</p>
+          )}
+          {platform === 'Facebook' && (
+            <p className="mt-0.5 max-w-xl text-[11px] text-slate-400">
+              Meta's API provides followers + interactions for Pages — reach, views and new followers aren't available and can be filled via the weekly Excel import.
+            </p>
+          )}
         </div>
       </div>
       <div className="flex items-center gap-2">
@@ -75,6 +96,28 @@ export default function MetaSync({ orgId, platform, onSynced }) {
           <RefreshCw className="h-4 w-4" /> Sync from Meta
         </Button>
       </div>
+
+      {/* What the last sync actually landed: one chip per written field, plus any skip reasons. */}
+      {lastSync && (lastSync.written?.length > 0 || lastSync.skipped?.length > 0) && (
+        <div className="w-full space-y-1.5 border-t border-slate-100 pt-3 dark:border-slate-800">
+          {(lastSync.written || []).map((w) => (
+            <div key={w.platform} className="flex flex-wrap items-center gap-1.5">
+              <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Last sync wrote:</span>
+              {(w.fields || []).map((f) => (
+                <span key={f} className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400">
+                  {labels[f] || f}: {formatNumber(w.metrics?.[f])}
+                </span>
+              ))}
+            </div>
+          ))}
+          {(lastSync.skipped || []).map((s, i) => (
+            <p key={s.platform || i} className="flex items-start gap-1 text-[11px] text-amber-600 dark:text-amber-400">
+              <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" /> {s.platform ? `${s.platform}: ` : ''}{s.reason}
+            </p>
+          ))}
+        </div>
+      )}
+
       {setupOpen && <MetaSetupModal open={setupOpen} onClose={() => setSetupOpen(false)} />}
     </Card>
   );

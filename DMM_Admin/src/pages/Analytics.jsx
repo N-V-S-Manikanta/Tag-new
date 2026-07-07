@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { Linkedin, Instagram, Youtube, Facebook, Save, BarChart3, PenLine, Trophy, Users, Upload, Download, FileSpreadsheet, Trash2, LayoutGrid } from 'lucide-react';
+import { Linkedin, Instagram, Youtube, Facebook, Save, BarChart3, PenLine, Trophy, Users, Upload, Download, FileSpreadsheet, Trash2, LayoutGrid, Zap } from 'lucide-react';
 import { analyticsApi } from '../api/endpoints.js';
 import { downloadBlob } from '../lib/utils.js';
 import { useOrgStore } from '../store/orgStore.js';
@@ -149,10 +149,10 @@ function OrgAnalytics({ orgId, initialPlatform }) {
       )}
 
       {mode === 'report' && (platform === 'Instagram' || platform === 'Facebook') && (
-        <MetaSync orgId={orgId} platform={platform} onSynced={() => qc.invalidateQueries({ queryKey: ['report', orgId, platform] })} />
+        <MetaSync orgId={orgId} platform={platform} report={report} onSynced={() => qc.invalidateQueries({ queryKey: ['report', orgId, platform] })} />
       )}
       {mode === 'report' && platform === 'YouTube' && (
-        <YoutubeSync orgId={orgId} onSynced={() => qc.invalidateQueries({ queryKey: ['report', orgId, platform] })} />
+        <YoutubeSync orgId={orgId} report={report} onSynced={() => qc.invalidateQueries({ queryKey: ['report', orgId, platform] })} />
       )}
 
       {mode === 'linkedin' && <LinkedInView orgId={orgId} />}
@@ -170,6 +170,11 @@ function MetricEntry({ orgId, platform, report }) {
   const groups = report?.groups || {};
   const labels = report?.labels || {};
   const pct = new Set(report?.percentFields || []);
+  // Plain-language explanation per field + which fields the platform's one-click
+  // auto-sync fills (older cached payloads may lack both — degrade gracefully).
+  const help = report?.help || {};
+  const sync = report?.sync || { provider: null, fields: [] };
+  const autoFields = new Set(sync.provider ? sync.fields || [] : []);
   const series = report?.series || [];
   const allFields = Object.values(groups).flat();
   const [date, setDate] = useState(todayStr());
@@ -226,10 +231,24 @@ function MetricEntry({ orgId, platform, report }) {
         <Card key={group} className="p-5">
           <h3 className="mb-4 font-bold text-slate-800 dark:text-white">{group}</h3>
           <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
-            {fields.map((f) => (
-              <Input key={f} label={labels[f]} type="number" min="0" step={pct.has(f) ? '0.1' : '1'}
-                value={values[f] ?? ''} onChange={(e) => setValues({ ...values, [f]: e.target.value })} placeholder="0" />
-            ))}
+            {fields.map((f) => {
+              // One-line hint under each input: what the metric means, and a ⚡
+              // marker on fields the auto-sync fills so admins skip hand-typing them.
+              const auto = autoFields.has(f);
+              const hint = auto ? `auto-syncs from ${sync.provider}${help[f] ? ` — ${help[f]}` : ''}` : help[f];
+              return (
+                <div key={f} className="min-w-0">
+                  <Input label={labels[f]} type="number" min="0" step={pct.has(f) ? '0.1' : '1'}
+                    value={values[f] ?? ''} onChange={(e) => setValues({ ...values, [f]: e.target.value })} placeholder="0" />
+                  {hint && (
+                    <p className="mt-1 flex items-center gap-1 text-[11px] text-slate-400" title={help[f] || hint}>
+                      {auto && <Zap className="h-3 w-3 shrink-0 text-amber-500" />}
+                      <span className="truncate">{hint}</span>
+                    </p>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </Card>
       ))}

@@ -1,3 +1,4 @@
+import { Info } from 'lucide-react';
 import { cn, initials, STATUS_STYLES } from '../../lib/utils.js';
 
 // ---- Card ----
@@ -64,6 +65,23 @@ export function Avatar({ src, name = '', size = 'md', className }) {
 // ---- Skeleton ----
 export function Skeleton({ className }) {
   return <div className={cn('animate-pulse rounded-lg bg-slate-200 dark:bg-slate-800', className)} />;
+}
+
+// ---- InfoTip ----
+// Small info icon that reveals a plain-language explanation on hover or
+// keyboard focus. Pure Tailwind (named group + focus-within) — no positioning
+// JS — so it can sit inside clickable cards without extra wiring.
+export function InfoTip({ text, className }) {
+  if (!text) return null;
+  return (
+    <span tabIndex={0} role="button" aria-label={text}
+      className={cn('group/tip relative inline-flex shrink-0 cursor-help text-slate-300 outline-none hover:text-slate-400 focus:text-slate-400 dark:text-slate-600 dark:hover:text-slate-400 dark:focus:text-slate-400', className)}>
+      <Info className="h-3.5 w-3.5" />
+      <span className="pointer-events-none invisible absolute bottom-full left-1/2 z-50 mb-1.5 w-max max-w-[230px] -translate-x-1/2 whitespace-normal rounded-lg bg-slate-800 px-2.5 py-1.5 text-left text-[11px] font-normal normal-case leading-snug tracking-normal text-slate-100 opacity-0 shadow-lg transition-opacity group-hover/tip:visible group-hover/tip:opacity-100 group-focus-within/tip:visible group-focus-within/tip:opacity-100 dark:bg-slate-700">
+        {text}
+      </span>
+    </span>
+  );
 }
 
 // ---- EmptyState ----

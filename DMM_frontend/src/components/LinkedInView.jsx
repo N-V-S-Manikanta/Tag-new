@@ -318,10 +318,35 @@ function UploadSlot({ slot, orgId, status, onDone }) {
 }
 
 // ---- Shared pieces ----
-function MetricCard({ label, value, delta, isPct, suffix }) {
+// Plain-language definitions surfaced as a native title tooltip on each
+// metric card label.
+const TIPS = {
+  impressions: 'How many times your posts were shown on screen.',
+  uniqueImpressions: 'How many individual people saw your posts at least once.',
+  clicks: 'Clicks on your posts, page name or logo.',
+  clickThroughRate: 'Clicks divided by impressions — how often a view became a click.',
+  engagementRate: 'Clicks, reactions, comments and reposts divided by impressions.',
+  reactions: 'Likes and other reactions on your posts.',
+  comments: 'Comments left on your posts.',
+  reposts: 'Times your posts were re-shared by others.',
+  pageViews: 'Total visits to your LinkedIn page.',
+  uniqueVisitors: 'Individual people who visited your page.',
+  desktopPageViews: 'Page views from desktop devices.',
+  mobilePageViews: 'Page views from mobile devices.',
+  customButtonClicks: 'Clicks on your page’s custom button (e.g. Visit website).',
+  followers: 'Total audience following your page right now.',
+  newFollowers: 'Followers gained during the period (organic + sponsored).',
+  organicFollowers: 'Followers gained without paid promotion.',
+  sponsoredFollowers: 'Followers gained from paid campaigns.',
+  leads: 'Contacts collected through LinkedIn lead-gen forms.',
+  leadFormViews: 'Times a LinkedIn lead-gen form was viewed.',
+  leadConversionRate: 'Leads divided by lead form views.',
+};
+
+function MetricCard({ label, value, delta, isPct, suffix, field }) {
   return (
     <Card className="p-4">
-      <p className="text-[13px] font-medium text-slate-400">{label}{suffix ? <span className="text-slate-300"> · {suffix}</span> : null}</p>
+      <p className="text-[13px] font-medium text-slate-400" title={TIPS[field]}>{label}{suffix ? <span className="text-slate-300"> · {suffix}</span> : null}</p>
       <p className="mt-1.5 text-[26px] font-extrabold tracking-tight text-slate-800 dark:text-white">{fmt(value, isPct)}</p>
       {delta && <div className="mt-1.5"><DeltaBadge delta={delta} isPct={isPct} /></div>}
     </Card>
@@ -409,10 +434,10 @@ function ContentTab({ totals, deltas, series, posts, range, hasData }) {
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <MetricCard label="Impressions" suffix={`${range}d`} value={totals.impressions} delta={deltas.impressions} />
-        <MetricCard label="Clicks" suffix={`${range}d`} value={totals.clicks} delta={deltas.clicks} />
-        <MetricCard label="Reactions" suffix={`${range}d`} value={totals.reactions} delta={deltas.reactions} />
-        <MetricCard label="Engagement rate" value={totals.engagementRate} delta={deltas.engagementRate} isPct />
+        <MetricCard label="Impressions" field="impressions" suffix={`${range}d`} value={totals.impressions} delta={deltas.impressions} />
+        <MetricCard label="Clicks" field="clicks" suffix={`${range}d`} value={totals.clicks} delta={deltas.clicks} />
+        <MetricCard label="Reactions" field="reactions" suffix={`${range}d`} value={totals.reactions} delta={deltas.reactions} />
+        <MetricCard label="Engagement rate" field="engagementRate" value={totals.engagementRate} delta={deltas.engagementRate} isPct />
       </div>
 
       <Card className="p-5">
@@ -512,10 +537,10 @@ function VisitorsTab({ totals, deltas, series, demographics, range }) {
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <MetricCard label="Page views" suffix={`${range}d`} value={totals.pageViews} delta={deltas.pageViews} />
-        <MetricCard label="Unique visitors" suffix={`${range}d`} value={totals.uniqueVisitors} delta={deltas.uniqueVisitors} />
-        <MetricCard label="Desktop views" suffix={`${range}d`} value={totals.desktopPageViews} delta={deltas.desktopPageViews} />
-        <MetricCard label="Custom button clicks" suffix={`${range}d`} value={totals.customButtonClicks} delta={deltas.customButtonClicks} />
+        <MetricCard label="Page views" field="pageViews" suffix={`${range}d`} value={totals.pageViews} delta={deltas.pageViews} />
+        <MetricCard label="Unique visitors" field="uniqueVisitors" suffix={`${range}d`} value={totals.uniqueVisitors} delta={deltas.uniqueVisitors} />
+        <MetricCard label="Desktop views" field="desktopPageViews" suffix={`${range}d`} value={totals.desktopPageViews} delta={deltas.desktopPageViews} />
+        <MetricCard label="Custom button clicks" field="customButtonClicks" suffix={`${range}d`} value={totals.customButtonClicks} delta={deltas.customButtonClicks} />
       </div>
       <div className="grid gap-4 lg:grid-cols-2">
         <Card className="p-5">
@@ -540,10 +565,10 @@ function FollowersTab({ totals, deltas, latest, series, demographics, range, org
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {/* totals.followers is the end-of-window snapshot from the followers-
             anchored bucket — the overall latest day may not carry follower data. */}
-        <MetricCard label="Total followers" value={currentTotal} delta={deltas.followers} />
-        <MetricCard label="New followers" suffix={`${range}d`} value={totals.newFollowers} delta={deltas.newFollowers} />
-        <MetricCard label="Organic followers" suffix={`${range}d`} value={totals.organicFollowers} delta={deltas.organicFollowers} />
-        <MetricCard label="Sponsored followers" suffix={`${range}d`} value={totals.sponsoredFollowers} delta={deltas.sponsoredFollowers} />
+        <MetricCard label="Total followers" field="followers" value={currentTotal} delta={deltas.followers} />
+        <MetricCard label="New followers" field="newFollowers" suffix={`${range}d`} value={totals.newFollowers} delta={deltas.newFollowers} />
+        <MetricCard label="Organic followers" field="organicFollowers" suffix={`${range}d`} value={totals.organicFollowers} delta={deltas.organicFollowers} />
+        <MetricCard label="Sponsored followers" field="sponsoredFollowers" suffix={`${range}d`} value={totals.sponsoredFollowers} delta={deltas.sponsoredFollowers} />
       </div>
       <div className="grid gap-4 lg:grid-cols-2">
         <Card className="p-5">
@@ -674,7 +699,7 @@ function SimpleMetricTab({ title, description, field, totals, deltas, series, ra
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <MetricCard label={title} suffix={`${range}d`} value={totals[field]} delta={deltas[field]} />
+        <MetricCard label={title} field={field} suffix={`${range}d`} value={totals[field]} delta={deltas[field]} />
       </div>
       <Card className="p-5">
         <h3 className="mb-1 font-bold text-slate-800 dark:text-white">{title}</h3>
@@ -690,9 +715,9 @@ function LeadsTab({ totals, deltas, series, range }) {
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <MetricCard label="Leads" suffix={`${range}d`} value={totals.leads} delta={deltas.leads} />
-        <MetricCard label="Lead form views" suffix={`${range}d`} value={totals.leadFormViews} delta={deltas.leadFormViews} />
-        <MetricCard label="Lead conversion rate" value={totals.leadConversionRate} delta={deltas.leadConversionRate} isPct />
+        <MetricCard label="Leads" field="leads" suffix={`${range}d`} value={totals.leads} delta={deltas.leads} />
+        <MetricCard label="Lead form views" field="leadFormViews" suffix={`${range}d`} value={totals.leadFormViews} delta={deltas.leadFormViews} />
+        <MetricCard label="Lead conversion rate" field="leadConversionRate" value={totals.leadConversionRate} delta={deltas.leadConversionRate} isPct />
       </div>
       <Card className="p-5">
         <h3 className="mb-1 font-bold text-slate-800 dark:text-white">Leads</h3>

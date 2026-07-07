@@ -63,6 +63,55 @@ export const FIELD_LABELS = {
   leadConversionRate: 'Lead Conversion Rate',
 };
 
+// Plain-language, one-sentence explanations for every field in FIELD_LABELS,
+// written for a non-technical marketing admin. Shown as help text in the UI.
+export const FIELD_HELP = {
+  profilesManaged: 'How many social profiles your team manages on this platform.',
+  followers: 'Total audience size — everyone who follows this page.',
+  newFollowers: 'People who started following you during this period.',
+  followersLast30Days: 'People who started following you in the last 30 days.',
+  organicFollowers: 'New followers who found you naturally, without paid promotion.',
+  sponsoredFollowers: 'New followers gained through paid or sponsored campaigns.',
+  subscribers: 'Total audience size — everyone subscribed to this channel.',
+  videoCount: 'The total number of public videos on the channel.',
+  impressions: 'How many times your posts appeared on someone\'s screen.',
+  uniqueImpressions: 'How many different people saw your posts, counting each person once.',
+  reach: 'How many different people saw any of your content, counting each person once per day.',
+  searchAppearances: 'How often your page showed up in search results.',
+  views: 'How many times your content was viewed.',
+  watchHours: 'The total hours people spent watching your videos.',
+  postsPublished: 'How many posts you published during this period.',
+  clicks: 'How many times people clicked on your posts or page.',
+  clickThroughRate: 'Of the people who saw your content, the percentage who clicked.',
+  engagementRate: 'Of the times your content was seen, the percentage that led to a like, comment, click or share.',
+  reactions: 'Likes and other quick emoji responses on your posts.',
+  comments: 'How many comments people left on your content.',
+  reposts: 'How many times people shared your posts with their own audience.',
+  interactions: 'All engagement actions combined — likes, comments, saves and shares. On Facebook this is the rolling 7-day "people talking about this" count.',
+  pageViews: 'How many times your page was viewed.',
+  uniqueVisitors: 'How many different people visited your page, counting each person once.',
+  visits: 'How many times people visited your page.',
+  linkClicks: 'How many times people clicked a link on your page or posts.',
+  desktopPageViews: 'Page views that came from a desktop computer.',
+  mobilePageViews: 'Page views that came from a phone or tablet.',
+  customButtonClicks: 'How many times people clicked your page\'s call-to-action button.',
+  leads: 'People who filled in a form and shared their contact details with you.',
+  leadFormViews: 'How many times people opened your lead form.',
+  leadConversionRate: 'Of the people who opened your lead form, the percentage who submitted it.',
+};
+
+// What each platform's one-click auto-sync actually fills (see metaService /
+// youtubeService). Everything else arrives via Excel import or manual entry.
+export const SYNC_INFO = {
+  LinkedIn: { provider: null, fields: [] }, // no API sync — Excel exports / manual only
+  Instagram: { provider: 'Meta', fields: ['followers', 'reach', 'views', 'interactions'] },
+  // Only the two node fields Meta still exposes reliably. newFollowers/visits are
+  // attempted via page insights but Meta retired those (they return empty), and
+  // reach/views don't exist for Facebook Pages at all — Instagram-only metrics.
+  Facebook: { provider: 'Meta', fields: ['followers', 'interactions'] },
+  YouTube: { provider: 'YouTube', fields: ['subscribers', 'views', 'videoCount', 'comments', 'engagementRate'] },
+};
+
 // Percentage-style fields render with a % suffix and 1 decimal.
 export const PERCENT_FIELDS = new Set(['engagementRate', 'clickThroughRate', 'leadConversionRate']);
 
@@ -83,7 +132,7 @@ export const getAnalytics = asyncHandler(async (req, res) => {
   for (const platform of PLATFORMS) {
     latest[platform] = await Analytics.findOne({ organization: orgId, platform }).sort({ date: -1 }).lean();
   }
-  res.json({ success: true, fields: PLATFORM_FIELDS, labels: FIELD_LABELS, percentFields: [...PERCENT_FIELDS], latest });
+  res.json({ success: true, fields: PLATFORM_FIELDS, labels: FIELD_LABELS, help: FIELD_HELP, syncInfo: SYNC_INFO, percentFields: [...PERCENT_FIELDS], latest });
 });
 
 // @route GET /api/analytics/overview  (ADMIN) — a matrix of every organization ×
@@ -238,8 +287,13 @@ export const getPlatformReport = asyncHandler(async (req, res) => {
   // take the end-of-week value.
   // On YouTube these are cumulative lifetime totals, so they take the end-of-week
   // value (growth = delta) rather than being summed.
+  // Facebook's `interactions` is Meta's rolling 7-day "people talking about this"
+  // count — every daily snapshot already spans a week, so summing them would
+  // count the same engagement up to 7 times. Take the end-of-window value instead.
+  // (Instagram's `interactions` is a true per-day total and stays summed.)
   const STOCK_FIELDS = new Set(['followers', 'subscribers', 'profilesManaged', 'followersLast30Days',
-    ...(platform === 'YouTube' ? ['views', 'videoCount', 'comments'] : [])]);
+    ...(platform === 'YouTube' ? ['views', 'videoCount', 'comments'] : []),
+    ...(platform === 'Facebook' ? ['interactions'] : [])]);
   // Engagement rate is DERIVED from the period totals exactly like LinkedIn does
   // — engagements ÷ impressions over the whole period — not an average of each
   // day's percentage (which is mathematically wrong and drifts a few tenths).
@@ -329,7 +383,10 @@ export const getPlatformReport = asyncHandler(async (req, res) => {
     hasData: !!latest,
     groups: PLATFORM_FIELDS[platform],
     labels: FIELD_LABELS,
+    help: FIELD_HELP,
+    sync: SYNC_INFO[platform],
     percentFields: [...PERCENT_FIELDS],
+    stockFields: [...STOCK_FIELDS], // end-of-period values, not per-period sums
     ranges: ALLOWED_RANGES,
     rangeDays,
     latest,

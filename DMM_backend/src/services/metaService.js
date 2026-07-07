@@ -195,16 +195,26 @@ export const getFacebookMetrics = async (pageId, pageTokenIn) => {
   // Page insights REQUIRE a Page Access Token (not the user/system token).
   const pageToken = pageTokenIn || (await getPageToken(pageId));
 
-  // Followers — node fields (work with the page token).
+  // Node fields are the ONLY Facebook signals the standard scopes still expose
+  // reliably. Meta retired almost every page_* time-series insight (they now
+  // return empty even on large pages), and reading post-level engagement needs
+  // the extra `pages_read_user_content` permission. So we lead with node fields:
+  //   • followers_count / fan_count → the audience total
+  //   • talking_about_count → Facebook's "People talking about this" (PTAT): a
+  //     rolling 7-day engagement count (likes, comments, shares, mentions,
+  //     check-ins). Mapped to `interactions` as our engagement signal.
   try {
-    const node = await call(pageId, { fields: 'followers_count,fan_count' }, pageToken);
+    const node = await call(pageId, { fields: 'followers_count,fan_count,talking_about_count' }, pageToken);
     const f = node.followers_count ?? node.fan_count;
     if (typeof f === 'number') out.followers = f;
+    if (typeof node.talking_about_count === 'number') out.interactions = node.talking_about_count;
   } catch { /* skip */ }
 
-  // Insights metrics that are still valid in current Graph versions (the old
-  // page_impressions / page_fan_adds names were retired in 2024). Each is fetched
-  // individually so a single unsupported metric never drops the rest.
+  // Insights are attempted defensively as a bonus: when a page DOES still return
+  // them, page_post_engagements (real, per-period engagement) overrides the PTAT
+  // proxy above, and follows/visits fill in. Each is fetched individually so a
+  // single unsupported/empty metric never drops the rest, and empty results are
+  // skipped (leaving the node-field values in place).
   const MAP = {
     page_post_engagements: 'interactions',
     page_daily_follows_unique: 'newFollowers',

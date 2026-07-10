@@ -1,24 +1,44 @@
 import asyncHandler from 'express-async-handler';
 import Asset from '../models/Asset.js';
+import Organization from '../models/Organization.js';
 import { uploadBuffer, deleteFile } from '../config/storage.js';
 import { logActivity } from '../utils/logActivity.js';
 import { requireOrgId } from '../utils/org.js';
-import { ACTIVITY_ACTIONS } from '../config/constants.js';
+import { ACTIVITY_ACTIONS, ROLES } from '../config/constants.js';
 
 const extOf = (name = '') => (name.split('.').pop() || '').toUpperCase();
+
+// May this user edit/delete the item? The uploader, the org CEO or an Admin.
+const canManage = (user, item) =>
+  String(item.uploadedBy) === String(user._id) || user.role === ROLES.CEO || user.role === ROLES.ADMIN;
+
+// Resolve the college a repository item is for, from the upload form.
+// '' / 'shared' → shared across all colleges (organization: null).
+const resolveItemOrg = async (organization, req, res) => {
+  if (organization === undefined) return requireOrgId(req, res); // legacy clients
+  if (!organization || organization === 'shared') return null;
+  const org = await Organization.findById(organization).select('_id');
+  if (!org) { res.status(400); throw new Error('Selected organization does not exist'); }
+  return org._id;
+};
 
 // @route GET /api/assets (org-scoped)
 export const getAssets = asyncHandler(async (req, res) => {
   const { search, category, page = 1, limit = 12 } = req.query;
-  // Shared workspace: assets from every organization are visible. An optional
-  // ?organizationId narrows to one org.
+  // College filter: a specific org shows that college's items PLUS the shared
+  // ones (shared assets apply to every college); 'shared' shows only shared.
   const query = {};
-  if (req.query.organizationId) query.organization = req.query.organizationId;
+  const ands = [];
+  if (req.query.organizationId === 'shared') query.organization = null;
+  else if (req.query.organizationId) ands.push({ $or: [{ organization: req.query.organizationId }, { organization: null }] });
   if (category && category !== 'All') query.category = category;
-  if (search) query.$or = [
-    { name: { $regex: search, $options: 'i' } },
-    { description: { $regex: search, $options: 'i' } },
-  ];
+  if (search) ands.push({
+    $or: [
+      { name: { $regex: search, $options: 'i' } },
+      { description: { $regex: search, $options: 'i' } },
+    ],
+  });
+  if (ands.length) query.$and = ands;
   const skip = (Number(page) - 1) * Number(limit);
   const [items, total] = await Promise.all([
     Asset.find(query).populate('uploadedBy', 'name avatar').populate('organization', 'name color').sort({ createdAt: -1 }).skip(skip).limit(Number(limit)),
@@ -36,8 +56,8 @@ export const getAsset = asyncHandler(async (req, res) => {
 
 // @route POST /api/assets
 export const createAsset = asyncHandler(async (req, res) => {
-  const orgId = requireOrgId(req, res);
-  const { name, description, category } = req.body;
+  const { name, description, category, organization } = req.body;
+  const orgId = await resolveItemOrg(organization, req, res);
   if (!name || !category) { res.status(400); throw new Error('Name and category are required'); }
   if (!req.files?.file?.[0]) { res.status(400); throw new Error('Asset file is required'); }
 
@@ -68,14 +88,16 @@ export const createAsset = asyncHandler(async (req, res) => {
 // @route PUT /api/assets/:id
 export const updateAsset = asyncHandler(async (req, res) => {
   const asset = await Asset.findById(req.params.id);
-  if (!asset || String(asset.organization) !== String(requireOrgId(req, res))) { res.status(404); throw new Error('Asset not found'); }
-  if (String(asset.uploadedBy) !== String(req.user._id) && req.user.role !== 'CEO') {
+  if (!asset) { res.status(404); throw new Error('Asset not found'); }
+  // Only the uploader, the CEO or an Admin can edit (shared workspace).
+  if (!canManage(req.user, asset)) {
     res.status(403); throw new Error('Not allowed to edit this asset');
   }
-  const { name, description, category } = req.body;
+  const { name, description, category, organization } = req.body;
   if (name) asset.name = name;
   if (description !== undefined) asset.description = description;
   if (category) asset.category = category;
+  if (organization !== undefined) asset.organization = await resolveItemOrg(organization, req, res);
 
   if (req.files?.file?.[0]) {
     if (asset.filePublicId) await deleteFile(asset.filePublicId);
@@ -97,8 +119,8 @@ export const updateAsset = asyncHandler(async (req, res) => {
 // @route DELETE /api/assets/:id
 export const deleteAsset = asyncHandler(async (req, res) => {
   const asset = await Asset.findById(req.params.id);
-  if (!asset || String(asset.organization) !== String(requireOrgId(req, res))) { res.status(404); throw new Error('Asset not found'); }
-  if (String(asset.uploadedBy) !== String(req.user._id) && req.user.role !== 'CEO') {
+  if (!asset) { res.status(404); throw new Error('Asset not found'); }
+  if (!canManage(req.user, asset)) {
     res.status(403); throw new Error('Not allowed to delete this asset');
   }
   if (asset.filePublicId) await deleteFile(asset.filePublicId);

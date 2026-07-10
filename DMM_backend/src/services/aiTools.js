@@ -8,7 +8,16 @@ import Analytics from '../models/Analytics.js';
 import Goal from '../models/Goal.js';
 import ApprovalRequest from '../models/ApprovalRequest.js';
 import PostPlan from '../models/PostPlan.js';
-import '../models/User.js'; // registers the User schema for populate('createdBy')
+import Template from '../models/Template.js';
+import Asset from '../models/Asset.js';
+import BrandAsset from '../models/BrandAsset.js';
+import Event from '../models/Event.js';
+import SignageLocation from '../models/SignageLocation.js';
+import SignageBanner from '../models/SignageBanner.js';
+import User from '../models/User.js';
+import Website from '../models/Website.js';
+import Purchase from '../models/Purchase.js';
+import ActivityLog from '../models/ActivityLog.js';
 import { computeProgress } from '../controllers/goalController.js';
 import { PLATFORMS, ROLES, APPROVAL_STATUS } from '../config/constants.js';
 
@@ -88,6 +97,78 @@ export const TOOL_DEFINITIONS = [
         organization: { type: 'string', description: 'Organization name (optional)' },
         status: { type: 'string', enum: ['PENDING', 'APPROVED', 'REJECTED', 'RESUBMITTED'] },
       },
+      required: [],
+    },
+  },
+  {
+    name: 'templates_and_assets',
+    description: 'The Template Repository and Asset Library: total counts, breakdown by category and by college (items can belong to one college or be shared across all), download counts, and the most recent uploads. Optionally search by name or filter to one organization.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        organization: { type: 'string', description: 'Organization name (optional) — also returns shared items' },
+        search: { type: 'string', description: 'Match against item names (optional)' },
+      },
+      required: [],
+    },
+  },
+  {
+    name: 'brand_library',
+    description: 'Brand Library material per organization: flyers, brochures, branding videos, images and external links. Counts by category plus recent items.',
+    input_schema: {
+      type: 'object',
+      properties: { organization: { type: 'string', description: 'Organization name (optional)' } },
+      required: [],
+    },
+  },
+  {
+    name: 'events_list',
+    description: 'College/marketing events captured by the team, each with its date, location, related organization and photo-folder link. Optionally search by name.',
+    input_schema: {
+      type: 'object',
+      properties: { search: { type: 'string', description: 'Match against event names (optional)' } },
+      required: [],
+    },
+  },
+  {
+    name: 'signage_overview',
+    description: 'Physical campus signage: banner stands (code, place, type, fixed size, status occupied/empty/needs replacement/damaged), what banner is currently mounted on each and for which event, plus per-stand banner history counts.',
+    input_schema: { type: 'object', properties: {}, required: [] },
+  },
+  {
+    name: 'team_members',
+    description: 'People on the platform: counts by role (Super Admin / org Admin / User) and the member list with role and organization.',
+    input_schema: { type: 'object', properties: {}, required: [] },
+  },
+  {
+    name: 'websites_list',
+    description: "The group's website inventory: each institution's domain, site type, hosting provider and tech stack.",
+    input_schema: { type: 'object', properties: {}, required: [] },
+  },
+  {
+    name: 'premium_purchases',
+    description: 'Premium packs / tools / subscriptions purchased (Canva Pro, Envato…): vendor, seats, cost, purchase and expiry dates — including what expires soon. Admin/org-head data.',
+    input_schema: {
+      type: 'object',
+      properties: { organization: { type: 'string', description: 'Organization name (optional)' } },
+      required: [],
+    },
+  },
+  {
+    name: 'social_handlers',
+    description: 'Who manages each social media account per organization: account name, platform, owner and the coordinators handling it. Admin/org-head data.',
+    input_schema: {
+      type: 'object',
+      properties: { organization: { type: 'string', description: 'Organization name (optional)' } },
+      required: [],
+    },
+  },
+  {
+    name: 'recent_activity',
+    description: 'The platform activity log: who did what recently (uploads, approvals, analytics imports, goal changes…). Optionally filter to the last N days.',
+    input_schema: {
+      type: 'object',
+      properties: { days: { type: 'number', description: 'Only activity from the last N days (default 7, max 90)' } },
       required: [],
     },
   },
@@ -243,6 +324,187 @@ const handlers = {
       posts: p.items?.length || 0,
       platforms: [...new Set((p.items || []).map((i) => i.platform))],
       feedback: p.status === 'REJECTED' ? p.feedback : undefined,
+    }));
+  },
+
+  async templates_and_assets({ organization, search } = {}) {
+    // organization: null on an item means it is shared across every college.
+    const base = {};
+    if (organization) {
+      const org = await resolveOrg(organization);
+      if (!org) return { error: `No organization matching "${organization}".` };
+      base.$or = [{ organization: org._id }, { organization: null }];
+    }
+    if (search) base.name = { $regex: escapeRegex(search), $options: 'i' };
+
+    const summarize = async (Model) => {
+      const [total, byCategory, byOrg, recent] = await Promise.all([
+        Model.countDocuments(base),
+        Model.aggregate([{ $match: base }, { $group: { _id: '$category', n: { $sum: 1 } } }]),
+        Model.aggregate([{ $match: base }, { $group: { _id: '$organization', n: { $sum: 1 } } }]),
+        Model.find(base).populate('organization', 'name').populate('uploadedBy', 'name').sort({ createdAt: -1 }).limit(8).lean(),
+      ]);
+      const orgIds = byOrg.map((o) => o._id).filter(Boolean);
+      const orgs = await Organization.find({ _id: { $in: orgIds } }).select('name').lean();
+      const nameById = Object.fromEntries(orgs.map((o) => [String(o._id), o.name]));
+      return {
+        total,
+        byCategory: Object.fromEntries(byCategory.map((c) => [c._id, c.n])),
+        byCollege: Object.fromEntries(byOrg.map((o) => [o._id ? (nameById[String(o._id)] || 'Unknown') : 'Shared (all colleges)', o.n])),
+        recent: recent.map((t) => ({
+          name: t.name, category: t.category, type: t.fileType,
+          college: t.organization?.name || 'Shared', downloads: t.downloads || 0,
+          by: t.uploadedBy?.name, uploaded: iso(t.createdAt),
+        })),
+      };
+    };
+
+    const [templates, assets] = await Promise.all([summarize(Template), summarize(Asset)]);
+    return { totalCombined: templates.total + assets.total, templates, assets };
+  },
+
+  async brand_library({ organization } = {}) {
+    const query = {};
+    if (organization) {
+      const org = await resolveOrg(organization);
+      if (!org) return { error: `No organization matching "${organization}".` };
+      query.organization = org._id;
+    }
+    const [total, byCategory, byOrg, recent] = await Promise.all([
+      BrandAsset.countDocuments(query),
+      BrandAsset.aggregate([{ $match: query }, { $group: { _id: '$category', n: { $sum: 1 } } }]),
+      BrandAsset.aggregate([{ $match: query }, { $group: { _id: '$organization', n: { $sum: 1 } } }]),
+      BrandAsset.find(query).populate('organization', 'name').sort({ createdAt: -1 }).limit(8).lean(),
+    ]);
+    const orgs = await Organization.find({ _id: { $in: byOrg.map((o) => o._id).filter(Boolean) } }).select('name').lean();
+    const nameById = Object.fromEntries(orgs.map((o) => [String(o._id), o.name]));
+    return {
+      total,
+      byCategory: Object.fromEntries(byCategory.map((c) => [c._id, c.n])),
+      byOrganization: Object.fromEntries(byOrg.map((o) => [nameById[String(o._id)] || 'Unknown', o.n])),
+      recent: recent.map((b) => ({ title: b.title, category: b.category, kind: b.kind, organization: b.organization?.name, added: iso(b.createdAt) })),
+    };
+  },
+
+  async events_list({ search } = {}) {
+    const query = {};
+    if (search) query.name = { $regex: escapeRegex(search), $options: 'i' };
+    const events = await Event.find(query).populate('organization', 'name').sort({ eventDate: -1, createdAt: -1 }).limit(25).lean();
+    if (!events.length) return { note: 'No events recorded yet.' };
+    return { total: events.length, events: events.map((e) => ({
+      name: e.name, date: iso(e.eventDate), location: e.location || undefined,
+      organization: e.organization?.name || 'College-wide', photoFolder: e.folderLink,
+      description: e.description || undefined,
+    })) };
+  },
+
+  async signage_overview() {
+    const [locations, active, historyByLoc] = await Promise.all([
+      SignageLocation.find({}).populate('organization', 'name').sort({ code: 1 }).lean(),
+      SignageBanner.find({ status: 'ACTIVE' }).sort({ installedAt: -1 }).lean(),
+      SignageBanner.aggregate([{ $group: { _id: '$location', n: { $sum: 1 } } }]),
+    ]);
+    if (!locations.length) return { note: 'No signage locations set up yet.' };
+    const activeByLoc = {};
+    for (const b of active) if (!activeByLoc[b.location]) activeByLoc[b.location] = b;
+    const histById = Object.fromEntries(historyByLoc.map((h) => [String(h._id), h.n]));
+    return {
+      totalStands: locations.length,
+      byStatus: locations.reduce((acc, l) => { acc[l.status] = (acc[l.status] || 0) + 1; return acc; }, {}),
+      stands: locations.map((l) => {
+        const cur = activeByLoc[l._id];
+        return {
+          code: l.code, place: l.place, type: l.standType,
+          size: l.width || l.height ? `${l.width} x ${l.height} ${l.sizeUnit}` : undefined,
+          status: l.status, organization: l.organization?.name || undefined,
+          currentBanner: cur ? { title: cur.title, event: cur.eventName || undefined, since: iso(cur.installedAt) } : null,
+          bannersEverMounted: histById[String(l._id)] || 0,
+        };
+      }),
+    };
+  },
+
+  async team_members(_input, user) {
+    const users = await User.find({}).populate('organization', 'name').populate('handles.organization', 'name').select('name role organization isActive jobTitle email skills tools handles').sort({ role: 1, name: 1 }).lean();
+    const privileged = [ROLES.ADMIN, ROLES.CEO].includes(user.role);
+    return {
+      total: users.length,
+      active: users.filter((u) => u.isActive).length,
+      byRole: users.reduce((acc, u) => { acc[u.role] = (acc[u.role] || 0) + 1; return acc; }, {}),
+      members: users.map((u) => ({
+        name: u.name, role: u.role, jobTitle: u.jobTitle || undefined,
+        organization: u.organization?.name || undefined, active: u.isActive,
+        skills: u.skills?.length ? u.skills : undefined,
+        tools: u.tools?.length ? u.tools : undefined,
+        handles: u.handles?.length ? u.handles.map((h) => `${h.organization?.name || 'org'}: ${(h.platforms || []).join('/')}`) : undefined,
+        // Contact details only for admins/org heads.
+        email: privileged ? u.email : undefined,
+      })),
+    };
+  },
+
+  async websites_list() {
+    const sites = await Website.find({}).populate('organization', 'name').sort({ institution: 1 }).lean();
+    if (!sites.length) return { note: 'No websites recorded yet.' };
+    return { total: sites.length, websites: sites.map((w) => ({
+      institution: w.institution, domain: w.domain || undefined, type: w.siteType || undefined,
+      hosting: w.hosting || undefined, builtWith: w.builtWith || undefined,
+      organization: w.organization?.name || undefined,
+    })) };
+  },
+
+  async premium_purchases({ organization } = {}, user) {
+    // Purchases are management data — hidden from regular users in the app too.
+    if (![ROLES.ADMIN, ROLES.CEO].includes(user.role)) return { note: 'Premium pack purchases are only visible to Admins and organization heads.' };
+    const query = {};
+    if (user.role === ROLES.CEO) query.organization = user.organization?._id || user.organization;
+    if (organization) {
+      const org = await resolveOrg(organization);
+      if (!org) return { error: `No organization matching "${organization}".` };
+      query.organization = org._id;
+    }
+    const items = await Purchase.find(query).populate('organization', 'name').sort({ expiryDate: 1 }).lean();
+    if (!items.length) return { note: 'No purchases recorded for this filter.' };
+    const now = Date.now();
+    return { total: items.length, purchases: items.map((p) => ({
+      name: p.name, vendor: p.vendor || undefined, category: p.category,
+      organization: p.organization?.name, seats: p.seats, cost: p.cost, currency: p.currency,
+      purchased: iso(p.purchaseDate), expires: iso(p.expiryDate),
+      daysToExpiry: p.expiryDate ? Math.ceil((new Date(p.expiryDate) - now) / 86400000) : undefined,
+    })) };
+  },
+
+  async social_handlers({ organization } = {}, user) {
+    if (![ROLES.ADMIN, ROLES.CEO].includes(user.role)) return { note: 'The social handlers directory is only visible to Admins and organization heads.' };
+    const { default: SocialAccount } = await import('../models/SocialAccount.js');
+    const query = {};
+    if (user.role === ROLES.CEO) query.organization = user.organization?._id || user.organization;
+    if (organization) {
+      const org = await resolveOrg(organization);
+      if (!org) return { error: `No organization matching "${organization}".` };
+      query.organization = org._id;
+    }
+    const accounts = await SocialAccount.find(query).populate('organization', 'name').lean();
+    if (!accounts.length) return { note: 'No social accounts recorded for this filter.' };
+    return accounts.map((a) => ({
+      organization: a.organization?.name, platform: a.platform,
+      accountName: a.accountName || undefined, owner: a.ownerName || undefined,
+      handlers: (a.handlers || []).map((h) => h.name).filter(Boolean),
+      peopleWithAccess: a.accessCount || undefined,
+    }));
+  },
+
+  async recent_activity({ days = 7 } = {}, user) {
+    const query = { createdAt: { $gte: new Date(Date.now() - Math.min(Math.max(Number(days) || 7, 1), 90) * 86400000) } };
+    // Users see their own trail; org heads their org's; admins everything.
+    if (user.role === ROLES.USER) query.user = user._id;
+    else if (user.role === ROLES.CEO) query.organization = user.organization?._id || user.organization;
+    const logs = await ActivityLog.find(query).populate('user', 'name').populate('organization', 'name').sort({ createdAt: -1 }).limit(30).lean();
+    if (!logs.length) return { note: 'No activity in this window.' };
+    return logs.map((l) => ({
+      when: new Date(l.createdAt).toISOString().slice(0, 16).replace('T', ' '),
+      who: l.user?.name, organization: l.organization?.name || undefined,
+      action: l.action, description: l.description,
     }));
   },
 };

@@ -1,10 +1,12 @@
 import asyncHandler from 'express-async-handler';
 import User from '../models/User.js';
 import Organization from '../models/Organization.js';
+import ProfileUpdateRequest from '../models/ProfileUpdateRequest.js';
 import { uploadBuffer, deleteFile } from '../config/storage.js';
 import { logActivity } from '../utils/logActivity.js';
+import { createNotification } from '../utils/notify.js';
 import { sendEmail } from '../utils/email.js';
-import { ROLES, ACTIVITY_ACTIONS } from '../config/constants.js';
+import { ROLES, ACTIVITY_ACTIONS, NOTIFICATION_TYPES } from '../config/constants.js';
 
 const sanitize = (u) => ({
   _id: u._id,
@@ -17,6 +19,9 @@ const sanitize = (u) => ({
   phone: u.phone || '',
   linkedinUrl: u.linkedinUrl || '',
   skills: u.skills || [],
+  tools: u.tools || [],
+  handles: u.handles || [],
+  profileCompletedAt: u.profileCompletedAt || null,
   isActive: u.isActive,
   settings: u.settings,
   organization: u.organization || null,
@@ -253,4 +258,153 @@ export const updateSettings = asyncHandler(async (req, res) => {
   }
   await user.save();
   res.json({ success: true, settings: user.settings });
+});
+
+// ======================= PROFILE COMPLETION + REVIEW =======================
+
+// Validate a handles payload: [{ organization, platforms: [] }] with real orgs.
+const parseHandles = async (raw) => {
+  const arr = Array.isArray(raw) ? raw : [];
+  const clean = [];
+  for (const h of arr.slice(0, 20)) {
+    if (!h?.organization) continue;
+    const org = await Organization.findById(h.organization).select('_id');
+    if (!org) continue;
+    const platforms = (Array.isArray(h.platforms) ? h.platforms : []).map((p) => String(p).trim()).filter(Boolean).slice(0, 10);
+    if (platforms.length) clean.push({ organization: org._id, platforms });
+  }
+  return clean;
+};
+
+// @route PUT /api/users/profile/complete — the FIRST profile fill-in after the
+// account is created. Applies directly (no review) and unlocks the app.
+export const completeProfile = asyncHandler(async (req, res) => {
+  const user = await User.findById(req.user._id);
+  if (user.profileCompletedAt) {
+    res.status(400);
+    throw new Error('Your profile is already completed — further skill/tool changes need an update request');
+  }
+  const { name, phone, jobTitle, linkedinUrl, skills, tools, handles } = req.body;
+  if (!name?.trim()) { res.status(400); throw new Error('Your name is required'); }
+  if (!phone?.trim()) { res.status(400); throw new Error('Your phone number is required'); }
+  const skillList = parseSkills(skills);
+  const toolList = parseSkills(tools);
+  if (!skillList.length) { res.status(400); throw new Error('Add at least one skill'); }
+  if (!toolList.length) { res.status(400); throw new Error('Add at least one tool you know'); }
+  const handleList = await parseHandles(handles);
+  if (user.role === ROLES.USER && !handleList.length) {
+    res.status(400); throw new Error('Add at least one organization/page you handle');
+  }
+
+  user.name = name.trim();
+  user.phone = phone.trim();
+  if (jobTitle !== undefined) user.jobTitle = jobTitle;
+  if (linkedinUrl !== undefined) user.linkedinUrl = linkedinUrl;
+  user.skills = skillList;
+  user.tools = toolList;
+  user.handles = handleList;
+  user.profileCompletedAt = new Date();
+  await user.save();
+
+  logActivity({ user: user._id, organization: user.organization, action: ACTIVITY_ACTIONS.PROFILE_UPDATED, description: `${user.name} completed their profile`, entityType: 'User', entityId: user._id });
+  const populated = await User.findById(user._id).populate('organization', 'name slug logo color isActive');
+  res.json({ success: true, user: sanitize(populated) });
+});
+
+// @route GET /api/users/profile/update-request — my latest request (any status),
+// so the profile page can show pending/rejected state.
+export const myProfileRequest = asyncHandler(async (req, res) => {
+  const request = await ProfileUpdateRequest.findOne({ user: req.user._id })
+    .sort({ createdAt: -1 })
+    .populate('reviewedBy', 'name')
+    .populate('changes.handles.organization', 'name color')
+    .lean();
+  res.json({ success: true, request: request || null });
+});
+
+// @route POST /api/users/profile/update-request — propose new skills/tools/handles.
+// Replaces any still-pending request; an Admin must approve before it applies.
+export const requestProfileUpdate = asyncHandler(async (req, res) => {
+  const user = await User.findById(req.user._id);
+  if (!user.profileCompletedAt) { res.status(400); throw new Error('Complete your profile first'); }
+
+  const { skills, tools, handles, note } = req.body;
+  const skillList = parseSkills(skills);
+  const toolList = parseSkills(tools);
+  if (!skillList.length) { res.status(400); throw new Error('Add at least one skill'); }
+  if (!toolList.length) { res.status(400); throw new Error('Add at least one tool'); }
+  const handleList = await parseHandles(handles);
+
+  // One pending request per user — a resubmission replaces the previous one.
+  await ProfileUpdateRequest.deleteMany({ user: user._id, status: 'PENDING' });
+  const request = await ProfileUpdateRequest.create({
+    user: user._id,
+    changes: { skills: skillList, tools: toolList, handles: handleList },
+    note: note || '',
+  });
+
+  // Tell the admins there is something to review.
+  const admins = await User.find({ isActive: true, role: ROLES.ADMIN }).select('_id');
+  await Promise.all(admins.map((a) => createNotification({
+    recipient: a._id, organization: user.organization, type: NOTIFICATION_TYPES.PROFILE_UPDATE_SUBMITTED,
+    title: 'Profile update to review', message: `${user.name} wants to update their skills/tools`,
+    link: '/users',
+  })));
+  logActivity({ user: user._id, organization: user.organization, action: ACTIVITY_ACTIONS.PROFILE_UPDATED, description: `${user.name} requested a profile update (awaiting review)`, entityType: 'User', entityId: user._id });
+  res.status(201).json({ success: true, request });
+});
+
+// @route GET /api/users/profile-requests?status=  (ADMIN) — the review queue,
+// each request alongside the user's CURRENT values for an easy diff.
+export const listProfileRequests = asyncHandler(async (req, res) => {
+  const status = ['PENDING', 'APPROVED', 'REJECTED'].includes(req.query.status) ? req.query.status : 'PENDING';
+  const requests = await ProfileUpdateRequest.find({ status })
+    .populate({
+      path: 'user',
+      select: 'name avatar email role skills tools handles organization',
+      populate: [
+        { path: 'organization', select: 'name color' },
+        { path: 'handles.organization', select: 'name color' },
+      ],
+    })
+    .populate('changes.handles.organization', 'name color')
+    .sort({ createdAt: -1 })
+    .lean();
+  res.json({ success: true, count: requests.length, requests });
+});
+
+// @route PUT /api/users/profile-requests/:id  (ADMIN) — { action: 'approve'|'reject', note }
+export const reviewProfileRequest = asyncHandler(async (req, res) => {
+  const request = await ProfileUpdateRequest.findById(req.params.id).populate('user', 'name organization');
+  if (!request) { res.status(404); throw new Error('Request not found'); }
+  if (request.status !== 'PENDING') { res.status(400); throw new Error('This request was already reviewed'); }
+
+  const { action, note } = req.body;
+  if (!['approve', 'reject'].includes(action)) { res.status(400); throw new Error('action must be approve or reject'); }
+
+  if (action === 'approve') {
+    const user = await User.findById(request.user._id);
+    user.skills = request.changes.skills || [];
+    user.tools = request.changes.tools || [];
+    user.handles = request.changes.handles || [];
+    await user.save();
+    request.status = 'APPROVED';
+  } else {
+    request.status = 'REJECTED';
+  }
+  request.reviewedBy = req.user._id;
+  request.reviewedAt = new Date();
+  request.reviewNote = note || '';
+  await request.save();
+
+  await createNotification({
+    recipient: request.user._id, organization: request.user.organization, type: NOTIFICATION_TYPES.PROFILE_UPDATE_REVIEWED,
+    title: action === 'approve' ? 'Profile update approved' : 'Profile update rejected',
+    message: action === 'approve'
+      ? 'Your new skills/tools are now live on your profile'
+      : `Your profile update was rejected${note ? `: ${note}` : ''}`,
+    link: '/profile',
+  });
+  logActivity({ user: req.user._id, organization: request.user.organization, action: ACTIVITY_ACTIONS.PROFILE_UPDATED, description: `${action === 'approve' ? 'Approved' : 'Rejected'} ${request.user.name}'s profile update`, entityType: 'User', entityId: request.user._id });
+  res.json({ success: true, request });
 });

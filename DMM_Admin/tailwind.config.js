@@ -5,11 +5,12 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Tag brand accent (orange), matching the logo.
+        // Tag brand accent — the ramp is anchored on the ACTUAL logo orange
+        // #f15d27 (warmer and slightly redder than Tailwind's stock orange).
         brand: {
-          50: '#fff7ed', 100: '#ffedd5', 200: '#fed7aa', 300: '#fdba74',
-          400: '#fb923c', 500: '#f97316', 600: '#ea580c', 700: '#c2410c',
-          800: '#9a3412', 900: '#7c2d12',
+          50: '#fff6f1', 100: '#ffe9de', 200: '#ffcfb8', 300: '#fdaa85',
+          400: '#f78154', 500: '#f15d27', 600: '#de4813', 700: '#b83a0f',
+          800: '#933112', 900: '#772b13',
         },
       },
       fontFamily: {

@@ -11,9 +11,11 @@ import Overview from './pages/Overview.jsx';
 import Organizations from './pages/Organizations.jsx';
 import Users from './pages/Users.jsx';
 import Approvals from './pages/Approvals.jsx';
+import ApprovalDetail from './pages/ApprovalDetail.jsx';
 import Analytics from './pages/Analytics.jsx';
 import BrandLibrary from './pages/BrandLibrary.jsx';
 import Events from './pages/Events.jsx';
+import Signage from './pages/Signage.jsx';
 import SocialAccounts from './pages/SocialAccounts.jsx';
 import Websites from './pages/Websites.jsx';
 import Purchases from './pages/Purchases.jsx';
@@ -60,9 +62,11 @@ export default function App() {
         <Route path="/organizations" element={<Organizations />} />
         <Route path="/users" element={<Users />} />
         <Route path="/approvals" element={<Approvals />} />
+        <Route path="/approvals/:id" element={<ApprovalDetail />} />
         <Route path="/analytics" element={<Analytics />} />
         <Route path="/brand-library" element={<BrandLibrary />} />
         <Route path="/events" element={<Events />} />
+        <Route path="/signage" element={<Signage />} />
         <Route path="/social-accounts" element={<SocialAccounts />} />
         <Route path="/websites" element={<Websites />} />
         <Route path="/purchases" element={<Purchases />} />

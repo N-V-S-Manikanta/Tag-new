@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import asyncHandler from 'express-async-handler';
 import ApprovalRequest from '../models/ApprovalRequest.js';
 import ApprovalImage from '../models/ApprovalImage.js';
@@ -57,6 +58,10 @@ const assertOrgAccess = (req, res, request) => {
   res.status(404); throw new Error('Request not found');
 };
 
+// Aggregation pipelines don't auto-cast strings to ObjectIds the way find()
+// does, so id filters coming from query params need an explicit cast.
+const toObjectId = (v) => (mongoose.isValidObjectId(v) ? new mongoose.Types.ObjectId(String(v)) : v);
+
 // Attach images (from approvalImages collection) to a list of plain request objects.
 const attachImages = async (requests) => {
   if (!requests.length) return requests;
@@ -67,6 +72,13 @@ const attachImages = async (requests) => {
     return acc;
   }, {});
   return requests.map((r) => ({ ...r, images: byReq[r._id] || [] }));
+};
+
+// Best-effort activity-feed write. The status transition is already persisted
+// when these run, so a failed feed row must never fail the whole request.
+const recordFeed = async (docs) => {
+  try { await ApprovalComment.insertMany(Array.isArray(docs) ? docs : [docs]); }
+  catch (err) { console.error('approval feed error:', err.message); }
 };
 
 // @route GET /api/approvals  — CEO sees their org, USER sees own, ADMIN sees
@@ -88,9 +100,6 @@ export const getApprovals = asyncHandler(async (req, res) => {
     if (req.query.organizationId) query.organization = req.query.organizationId;
   }
 
-  // "REVIEW" is a convenience filter for everything awaiting a decision.
-  if (status === 'REVIEW') query.status = { $in: [APPROVAL_STATUS.PENDING, APPROVAL_STATUS.RESUBMITTED] };
-  else if (status && status !== 'All') query.status = status;
   if (platform && platform !== 'All') query.platform = platform;
   if (search) query.$or = [
     { title: { $regex: search, $options: 'i' } },
@@ -102,13 +111,31 @@ export const getApprovals = asyncHandler(async (req, res) => {
     if (to) query.createdAt.$lte = new Date(`${to}T23:59:59.999Z`);
   }
 
+  // Per-status tab counts use the SAME scope minus the status filter, so the
+  // numbers stay stable while the user switches tabs. Ids must be cast for
+  // the aggregate (see toObjectId).
+  const countsQuery = { ...query };
+  if (countsQuery.organization) countsQuery.organization = toObjectId(countsQuery.organization);
+  if (countsQuery.createdBy) countsQuery.createdBy = toObjectId(countsQuery.createdBy);
+
+  // "REVIEW" is a convenience filter for everything awaiting a decision.
+  if (status === 'REVIEW') query.status = { $in: [APPROVAL_STATUS.PENDING, APPROVAL_STATUS.RESUBMITTED] };
+  else if (status && status !== 'All') query.status = status;
+
   const skip = (Number(page) - 1) * Number(limit);
-  const [items, total] = await Promise.all([
+  const [items, total, statusCounts] = await Promise.all([
     ApprovalRequest.find(query).populate('createdBy', 'name avatar email').populate('organization', 'name color').sort({ createdAt: -1 }).skip(skip).limit(Number(limit)).lean(),
     ApprovalRequest.countDocuments(query),
+    ApprovalRequest.aggregate([{ $match: countsQuery }, { $group: { _id: '$status', count: { $sum: 1 } } }]),
   ]);
+  const counts = { ALL: 0 };
+  Object.values(APPROVAL_STATUS).forEach((s) => { counts[s] = 0; });
+  statusCounts.forEach(({ _id, count }) => {
+    if (counts[_id] !== undefined) counts[_id] = count;
+    counts.ALL += count;
+  });
   const withImages = await attachImages(items);
-  res.json({ success: true, total, page: Number(page), pages: Math.ceil(total / limit), requests: withImages });
+  res.json({ success: true, total, page: Number(page), pages: Math.ceil(total / limit), counts, requests: withImages });
 });
 
 // @route GET /api/approvals/:id
@@ -128,7 +155,8 @@ export const getApproval = asyncHandler(async (req, res) => {
   }
   const [images, comments] = await Promise.all([
     ApprovalImage.find({ request: reqDoc._id }).sort({ order: 1 }).lean(),
-    ApprovalComment.find({ request: reqDoc._id }).populate('author', 'name avatar').sort({ createdAt: 1 }).lean(),
+    // _id tiebreaker keeps same-millisecond rows (reject event + its feedback batch) in insert order.
+    ApprovalComment.find({ request: reqDoc._id }).populate('author', 'name avatar').sort({ createdAt: 1, _id: 1 }).lean(),
   ]);
   res.json({ success: true, request: { ...reqDoc, images, comments } });
 });
@@ -187,6 +215,9 @@ export const approveRequest = asyncHandler(async (req, res) => {
   request.approvedBy = req.user._id;
   await request.save();
 
+  // Durable status-change marker in the request's activity feed.
+  await recordFeed({ request: request._id, kind: 'event', author: req.user._id, text: 'approved this request' });
+
   logActivity({ user: req.user._id, organization: request.organization, action: ACTIVITY_ACTIONS.APPROVAL_APPROVED, description: `Approved "${request.title}"`, entityType: 'ApprovalRequest', entityId: request._id });
   await createNotification({
     recipient: request.createdBy, organization: request.organization, type: NOTIFICATION_TYPES.CONTENT_APPROVED,
@@ -219,9 +250,11 @@ export const rejectRequest = asyncHandler(async (req, res) => {
   request.reviews.push({ reviewedBy: req.user._id, feedbackPoints });
   await request.save();
 
-  // Persist each feedback point into the approvalComments collection.
-  await ApprovalComment.insertMany(
-    feedbackPoints.map((p) => ({ request: request._id, text: p.text, category: p.category, author: req.user._id, reviewRound }))
+  // Durable status-change marker, then each feedback point, into the
+  // approvalComments collection (the event precedes its feedback rows).
+  await recordFeed({ request: request._id, kind: 'event', author: req.user._id, text: 'requested changes', reviewRound });
+  await recordFeed(
+    feedbackPoints.map((p) => ({ request: request._id, kind: 'feedback', text: p.text, category: p.category, author: req.user._id, reviewRound }))
   );
 
   logActivity({ user: req.user._id, organization: request.organization, action: ACTIVITY_ACTIONS.APPROVAL_REJECTED, description: `Rejected "${request.title}"`, entityType: 'ApprovalRequest', entityId: request._id });
@@ -277,6 +310,9 @@ export const resubmitRequest = asyncHandler(async (req, res) => {
   request.resubmitCount += 1;
   await request.save();
 
+  // Durable status-change marker in the request's activity feed.
+  await recordFeed({ request: request._id, kind: 'event', author: req.user._id, text: 'resubmitted with updates' });
+
   logActivity({ user: req.user._id, organization: request.organization, action: ACTIVITY_ACTIONS.APPROVAL_RESUBMITTED, description: `Resubmitted "${request.title}"`, entityType: 'ApprovalRequest', entityId: request._id });
   await notifyApprovers(NOTIFICATION_TYPES.CONTENT_RESUBMITTED, 'Content resubmitted', `${req.user.name} resubmitted "${request.title}"`, request);
 
@@ -296,10 +332,64 @@ export const markPosted = asyncHandler(async (req, res) => {
   request.postedBy = req.user._id;
   await request.save();
 
+  // Durable status-change marker in the request's activity feed.
+  await recordFeed({ request: request._id, kind: 'event', author: req.user._id, text: `marked as posted on ${request.platform}` });
+
   logActivity({ user: req.user._id, organization: request.organization, action: ACTIVITY_ACTIONS.POST_COMPLETION, description: `Marked "${request.title}" as posted`, entityType: 'ApprovalRequest', entityId: request._id });
   await notifyApprovers(NOTIFICATION_TYPES.CONTENT_POSTED, 'Content posted', `${req.user.name} posted "${request.title}" on ${request.platform}`, request);
 
   res.json({ success: true, request });
+});
+
+// @route POST /api/approvals/:id/comments  — chat message on the request's
+// activity feed, with optional image/video attachments (multipart 'files').
+// Visible-to = can-comment: the request owner, ADMIN, or the org's CEO.
+export const addComment = asyncHandler(async (req, res) => {
+  const request = await ApprovalRequest.findById(req.params.id);
+  if (!request) { res.status(404); throw new Error('Request not found'); }
+  assertOrgAccess(req, res, request);
+  const privileged = [ROLES.ADMIN, ROLES.CEO].includes(req.user.role);
+  const isOwner = String(request.createdBy) === String(req.user._id);
+  if (!privileged && !isOwner) { res.status(403); throw new Error('Not allowed to comment on this request'); }
+
+  const text = String(req.body.text || '').trim();
+  const files = req.files || [];
+  if (!text && files.length === 0) { res.status(400); throw new Error('Write a message or attach a file'); }
+  // The shared upload middleware also allows docs/sheets — chat renders media only.
+  if (files.some((f) => !/^(image|video)\//.test(f.mimetype || ''))) {
+    res.status(400); throw new Error('Only image and video attachments are allowed');
+  }
+
+  const attachments = [];
+  try {
+    for (const f of files) {
+      const up = await uploadBuffer(f.buffer, { folder: 'approvals', originalName: f.originalname });
+      const mediaType = f.mimetype?.startsWith('video/') ? 'video' : 'image';
+      attachments.push({ url: up.url, publicId: up.publicId, mediaType, name: f.originalname });
+    }
+  } catch (err) {
+    // A mid-loop failure must not orphan the files that already reached storage.
+    await Promise.all(attachments.map((a) => deleteFile(a.publicId).catch(() => {})));
+    throw err;
+  }
+
+  const created = await ApprovalComment.create({
+    request: request._id, kind: 'message', text, attachments, author: req.user._id,
+  });
+
+  // Owner's messages go to the approvers; a reviewer's message goes to the owner.
+  if (isOwner) {
+    await notifyApprovers(NOTIFICATION_TYPES.APPROVAL_COMMENT, 'New comment', `${req.user.name} commented on "${request.title}"`, request);
+  } else {
+    await createNotification({
+      recipient: request.createdBy, organization: request.organization, type: NOTIFICATION_TYPES.APPROVAL_COMMENT,
+      title: 'New comment', message: `${req.user.name} commented on "${request.title}"`,
+      link: `/approvals/${request._id}`, relatedRequest: request._id,
+    });
+  }
+
+  const comment = await ApprovalComment.findById(created._id).populate('author', 'name avatar').lean();
+  res.status(201).json({ success: true, comment });
 });
 
 // @route DELETE /api/approvals/:id  (owner or CEO)
@@ -312,6 +402,9 @@ export const deleteApproval = asyncHandler(async (req, res) => {
   }
   const images = await ApprovalImage.find({ request: request._id });
   await Promise.all(images.map((img) => deleteFile(img.publicId)));
+  // Chat attachments live on comment rows — remove their files from storage too.
+  const comments = await ApprovalComment.find({ request: request._id }).select('attachments').lean();
+  await Promise.all(comments.flatMap((c) => (c.attachments || []).map((a) => deleteFile(a.publicId))));
   await ApprovalImage.deleteMany({ request: request._id });
   await ApprovalComment.deleteMany({ request: request._id });
   await request.deleteOne();

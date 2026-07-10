@@ -15,6 +15,10 @@ const sanitize = (user) => ({
   jobTitle: user.jobTitle,
   phone: user.phone || '',
   linkedinUrl: user.linkedinUrl || '',
+  skills: user.skills || [],
+  tools: user.tools || [],
+  handles: user.handles || [],
+  profileCompletedAt: user.profileCompletedAt || null,
   settings: user.settings,
   // Populated org doc (CEO/USER) or null (ADMIN)
   organization: user.organization || null,

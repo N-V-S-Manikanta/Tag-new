@@ -42,6 +42,9 @@ export const userApi = {
   updateProfile: (formData) =>
     api.put('/users/profile', formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data),
   changePassword: (data) => api.put('/users/password', data).then((r) => r.data),
+  // Profile update review queue (skills/tools/handles changes await approval).
+  profileRequests: (params) => api.get('/users/profile-requests', { params }).then((r) => r.data),
+  reviewProfileRequest: (id, action, note) => api.put(`/users/profile-requests/${id}`, { action, note }).then((r) => r.data),
 };
 
 // Org-scoped calls — the active org is attached as x-organization-id by the client.
@@ -106,6 +109,8 @@ export const approvalApi = {
   get: (id) => api.get(`/approvals/${id}`).then((r) => r.data),
   approve: (id) => api.put(`/approvals/${id}/approve`).then((r) => r.data),
   reject: (id, feedbackPoints) => api.put(`/approvals/${id}/reject`, { feedbackPoints }).then((r) => r.data),
+  comment: (id, formData) =>
+    api.post(`/approvals/${id}/comments`, formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data),
   remove: (id) => api.delete(`/approvals/${id}`).then((r) => r.data),
 };
 
@@ -127,6 +132,20 @@ export const eventApi = {
   create: (formData) => api.post('/events', formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data),
   update: (id, formData) => api.put(`/events/${id}`, formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data),
   remove: (id) => api.delete(`/events/${id}`).then((r) => r.data),
+};
+
+// Signage — campus banner stands + their banner change history.
+const mpHeaders = { headers: { 'Content-Type': 'multipart/form-data' } };
+export const signageApi = {
+  locations: (params) => api.get('/signage/locations', { params }).then((r) => r.data),
+  createLocation: (formData) => api.post('/signage/locations', formData, mpHeaders).then((r) => r.data),
+  updateLocation: (id, formData) => api.put(`/signage/locations/${id}`, formData, mpHeaders).then((r) => r.data),
+  removeLocation: (id) => api.delete(`/signage/locations/${id}`).then((r) => r.data),
+  banners: (params) => api.get('/signage/banners', { params }).then((r) => r.data),
+  placeBanner: (formData) => api.post('/signage/banners', formData, mpHeaders).then((r) => r.data),
+  updateBanner: (id, formData) => api.put(`/signage/banners/${id}`, formData, mpHeaders).then((r) => r.data),
+  markRemoved: (id) => api.put(`/signage/banners/${id}/remove`).then((r) => r.data),
+  removeBanner: (id) => api.delete(`/signage/banners/${id}`).then((r) => r.data),
 };
 
 // Premium packs / purchases — org-scoped (active org via header).

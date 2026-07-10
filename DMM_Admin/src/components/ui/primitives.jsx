@@ -1,15 +1,32 @@
-import { Info } from 'lucide-react';
+import { useState } from 'react';
+import { Info, Eye, EyeOff } from 'lucide-react';
 import { cn, initials } from '../../lib/utils.js';
 
 export function Card({ className, children, ...props }) {
   return <div className={cn('card', className)} {...props}>{children}</div>;
 }
 
-export function Input({ className, label, error, ...props }) {
+// Password inputs automatically get a show/hide toggle.
+export function Input({ className, label, labelClassName, error, type, ...props }) {
+  const [show, setShow] = useState(false);
+  const isPassword = type === 'password';
+  const ToggleIcon = show ? EyeOff : Eye;
   return (
     <label className="block">
-      {label && <span className="mb-1.5 block text-sm font-medium text-slate-600 dark:text-slate-300">{label}</span>}
-      <input className={cn('input-base', error && 'border-rose-400 focus:border-rose-400 focus:ring-rose-500/10', className)} {...props} />
+      {label && <span className={cn('mb-1.5 block text-sm font-medium text-slate-600 dark:text-slate-300', labelClassName)}>{label}</span>}
+      <span className="relative block">
+        <input
+          type={isPassword && show ? 'text' : type}
+          className={cn('input-base', isPassword && 'pr-10', error && 'border-rose-400 focus:border-rose-400 focus:ring-rose-500/10', className)}
+          {...props}
+        />
+        {isPassword && (
+          <button type="button" onClick={() => setShow((s) => !s)} aria-label={show ? 'Hide password' : 'Show password'}
+            className="absolute inset-y-0 right-0 flex items-center px-3 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+            <ToggleIcon className="h-4 w-4" />
+          </button>
+        )}
+      </span>
       {error && <span className="mt-1 block text-xs text-rose-500">{error}</span>}
     </label>
   );

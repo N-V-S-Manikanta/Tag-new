@@ -1,29 +1,63 @@
 import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard, FileImage, Images, CheckSquare, BarChart3, CalendarDays,
-  FileText, Bell, Settings, X, TrendingUp, Palette, Share2, ShoppingBag, Camera, ClipboardList, Sparkles,
+  FileText, Bell, Settings, X, TrendingUp, Palette, Share2, ShoppingBag, Camera, ClipboardList, Sparkles, Flag, CircleUser,
 } from 'lucide-react';
 import { cn, roleLabel } from '../../lib/utils.js';
 import { useAuthStore } from '../../store/authStore.js';
 
-const MAIN_NAV = [
-  { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { to: '/assistant', label: 'AI Assistant', icon: Sparkles },
-  { to: '/templates', label: 'Templates', icon: FileImage },
-  { to: '/assets', label: 'Assets', icon: Images },
-  { to: '/brand-library', label: 'Brand Library', icon: Palette },
-  { to: '/events', label: 'Events', icon: Camera },
-  { to: '/approvals', label: 'Approvals', icon: CheckSquare },
-  { to: '/planner', label: 'Post Planner', icon: ClipboardList },
-  // Management info — only useful to the org head (CEO), hidden from regular users.
-  { to: '/social-handlers', label: 'Social Handlers', icon: Share2, roles: ['CEO'] },
-  { to: '/premium-packs', label: 'Premium Packs', icon: ShoppingBag, roles: ['CEO'] },
-  { to: '/calendar', label: 'Calendar', icon: CalendarDays },
-  { to: '/social-analytics', label: 'Social Analytics', icon: TrendingUp },
-  { to: '/approval-analytics', label: 'Approval Analytics', icon: BarChart3 },
-  { to: '/reports', label: 'Reports', icon: FileText },
-  { to: '/notifications', label: 'Notifications', icon: Bell },
-  { to: '/settings', label: 'Settings', icon: Settings },
+// Navigation grouped by what people are doing: making content, moving it
+// through the workflow, reading results, managing the org, and their account.
+const NAV_SECTIONS = [
+  {
+    title: null,
+    items: [
+      { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+      { to: '/assistant', label: 'Tago AI', icon: Sparkles },
+    ],
+  },
+  {
+    title: 'Content',
+    items: [
+      { to: '/templates', label: 'Templates', icon: FileImage },
+      { to: '/assets', label: 'Assets', icon: Images },
+      { to: '/brand-library', label: 'Brand Library', icon: Palette },
+      { to: '/events', label: 'Events', icon: Camera },
+      { to: '/signage', label: 'Signage', icon: Flag },
+    ],
+  },
+  {
+    title: 'Workflow',
+    items: [
+      { to: '/approvals', label: 'Approvals', icon: CheckSquare },
+      { to: '/planner', label: 'Post Planner', icon: ClipboardList },
+      { to: '/calendar', label: 'Calendar', icon: CalendarDays },
+    ],
+  },
+  {
+    title: 'Insights',
+    items: [
+      { to: '/social-analytics', label: 'Social Analytics', icon: TrendingUp },
+      { to: '/approval-analytics', label: 'Approval Analytics', icon: BarChart3 },
+      { to: '/reports', label: 'Reports', icon: FileText },
+    ],
+  },
+  {
+    // Management info — only useful to the org head (CEO), hidden from regular users.
+    title: 'Management',
+    items: [
+      { to: '/social-handlers', label: 'Social Handlers', icon: Share2, roles: ['CEO'] },
+      { to: '/premium-packs', label: 'Premium Packs', icon: ShoppingBag, roles: ['CEO'] },
+    ],
+  },
+  {
+    title: 'Account',
+    items: [
+      { to: '/notifications', label: 'Notifications', icon: Bell },
+      { to: '/profile', label: 'My Profile', icon: CircleUser },
+      { to: '/settings', label: 'Settings', icon: Settings },
+    ],
+  },
 ];
 
 // The "t@g" wordmark with the @ in brand orange.
@@ -66,13 +100,28 @@ export default function Sidebar({ open, onClose }) {
           </button>
         </div>
 
-        <nav aria-label="Main navigation" className="flex-1 space-y-1 overflow-y-auto px-4 py-4">
-          {MAIN_NAV.filter((i) => !i.roles || i.roles.includes(user?.role)).map(({ to, label, icon: Icon }) => (
-            <NavLink key={to} to={to} onClick={onClose} className={linkClass}>
-              <Icon className="h-[18px] w-[18px] shrink-0" />
-              {label}
-            </NavLink>
-          ))}
+        <nav aria-label="Main navigation" className="flex-1 overflow-y-auto px-4 py-4">
+          {NAV_SECTIONS.map((section, si) => {
+            const items = section.items.filter((i) => !i.roles || i.roles.includes(user?.role));
+            if (!items.length) return null;
+            return (
+              <div key={section.title || si}>
+                {section.title && (
+                  <p className={cn('px-3 pb-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500', si > 0 && 'pt-4')}>
+                    {section.title}
+                  </p>
+                )}
+                <div className="space-y-1">
+                  {items.map(({ to, label, icon: Icon }) => (
+                    <NavLink key={to} to={to} onClick={onClose} className={linkClass}>
+                      <Icon className="h-[18px] w-[18px] shrink-0" />
+                      {label}
+                    </NavLink>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
         </nav>
 
         <div className="border-t border-white/10 p-4">

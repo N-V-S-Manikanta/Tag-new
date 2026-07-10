@@ -31,8 +31,8 @@ export default function Assistant() {
   return (
     <div className="flex h-full flex-col">
       <PageHeader
-        title="AI Assistant"
-        subtitle="Ask anything about your organizations — analytics, goals, approvals, plans. Answers come from your live data."
+        title="Tago — AI Assistant"
+        subtitle="Ask Tago anything about your organizations — analytics, goals, approvals, plans. Answers come from your live data."
       />
       {isLoading ? <Skeleton className="h-96" /> : status?.configured ? <Chat /> : <SetupCard />}
     </div>
@@ -95,8 +95,8 @@ function Chat() {
               <Sparkles className="h-7 w-7" />
             </div>
             <div>
-              <p className="font-bold text-slate-800 dark:text-white">Hi {user?.name?.split(' ')[0]} — ask me about your marketing data</p>
-              <p className="mt-1 text-sm text-slate-400">I read the live database: analytics, goals, approvals and plans.</p>
+              <p className="font-bold text-slate-800 dark:text-white">Hi {user?.name?.split(' ')[0]} — I'm Tago, your marketing assistant</p>
+              <p className="mt-1 text-sm text-slate-400">I read the live database: analytics, goals, approvals, events, team and more.</p>
             </div>
             <div className="flex max-w-2xl flex-wrap justify-center gap-2">
               {SUGGESTIONS.map((s) => (
@@ -176,7 +176,8 @@ function Bubble({ msg }) {
 
 // Minimal markdown renderer for assistant replies: bold, bullets, numbered
 // lists, headings and pipe tables. Everything else renders as plain text.
-function Markdown({ text }) {
+// Exported so the floating TagoWidget renders replies identically.
+export function Markdown({ text }) {
   const lines = String(text || '').split('\n');
   const blocks = [];
   let i = 0;

@@ -1,9 +1,10 @@
+import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   FileText, CheckCircle2, Clock, XCircle, Send, Image as ImageIcon,
   FileImage, Layers, TrendingUp, Award,
 } from 'lucide-react';
-import { dashboardApi } from '../api/endpoints.js';
+import { dashboardApi, organizationApi } from '../api/endpoints.js';
 import { useAuthStore } from '../store/authStore.js';
 import PageHeader from '../components/layout/PageHeader.jsx';
 import StatCard from '../components/dashboard/StatCard.jsx';
@@ -18,11 +19,26 @@ export default function Dashboard() {
   const { user } = useAuthStore();
   // Admin + CEO get the org-wide dashboard; regular users get their personal view.
   const isCEO = ['ADMIN', 'CEO'].includes(user?.role);
+  const isAdmin = user?.role === 'ADMIN';
 
-  const { data: statsData, isLoading: loadingStats } = useQuery({ queryKey: ['dashboard', 'stats'], queryFn: dashboardApi.stats });
-  const { data: chartsData, isLoading: loadingCharts } = useQuery({ queryKey: ['dashboard', 'charts'], queryFn: dashboardApi.charts });
-  const { data: activityData } = useQuery({ queryKey: ['dashboard', 'activity'], queryFn: dashboardApi.activity });
-  const { data: topData } = useQuery({ queryKey: ['dashboard', 'top-platform'], queryFn: dashboardApi.topPlatform });
+  // Admins aren't tied to an organization, so the dashboard needs an org picker
+  // for them (last choice remembered). CEO/USER are locked to their own org.
+  const ownOrgId = user?.organization?._id || user?.organization || '';
+  const [orgId, setOrgId] = useState(() => ownOrgId || (isAdmin ? localStorage.getItem('tag-dashboard-org') || '' : ''));
+  const { data: orgData } = useQuery({ queryKey: ['org-options'], queryFn: organizationApi.options, enabled: isAdmin });
+  const orgs = orgData?.organizations || [];
+  useEffect(() => {
+    if (!isAdmin || !orgs.length) return;
+    if (!orgId || !orgs.some((o) => o._id === orgId)) setOrgId(orgs[0]._id);
+  }, [isAdmin, orgId, orgs]);
+  useEffect(() => {
+    if (isAdmin && orgId) localStorage.setItem('tag-dashboard-org', orgId);
+  }, [isAdmin, orgId]);
+
+  const { data: statsData, isLoading: loadingStats } = useQuery({ queryKey: ['dashboard', 'stats', orgId], queryFn: () => dashboardApi.stats(orgId), enabled: !!orgId });
+  const { data: chartsData, isLoading: loadingCharts } = useQuery({ queryKey: ['dashboard', 'charts', orgId], queryFn: () => dashboardApi.charts(orgId), enabled: !!orgId });
+  const { data: activityData } = useQuery({ queryKey: ['dashboard', 'activity', orgId], queryFn: () => dashboardApi.activity(orgId), enabled: !!orgId });
+  const { data: topData } = useQuery({ queryKey: ['dashboard', 'top-platform', orgId], queryFn: () => dashboardApi.topPlatform(orgId), enabled: !!orgId });
 
   const stats = statsData?.stats || {};
   const charts = chartsData?.charts || {};
@@ -54,13 +70,19 @@ export default function Dashboard() {
       <PageHeader
         title={`Welcome back, ${user?.name?.split(' ')[0]} 👋`}
         subtitle={isCEO ? 'Here is what is happening across your marketing operations.' : 'Track your content and stay on top of approvals.'}
+        actions={isAdmin && orgs.length > 0 && (
+          <select aria-label="Organization" className="input-base h-10 w-auto cursor-pointer text-sm font-semibold"
+            value={orgId} onChange={(e) => setOrgId(e.target.value)}>
+            {orgs.map((o) => <option key={o._id} value={o._id}>{o.name}</option>)}
+          </select>
+        )}
       />
 
       {/* Yearly goal progress (only shows when a goal is set) */}
-      {user?.organization && <GoalCard orgId={user.organization._id || user.organization} />}
+      {orgId && <GoalCard orgId={orgId} />}
 
       {/* Social analytics */}
-      <SocialCards social={statsData?.social} />
+      <SocialCards social={statsData?.social} orgId={orgId} />
 
       {/* Role KPIs */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">

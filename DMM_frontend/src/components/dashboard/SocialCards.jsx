@@ -13,10 +13,11 @@ const CONFIG = {
   Facebook: { icon: Facebook, color: '#1877F2', metrics: [['followers', 'Followers'], ['reach', 'Reach'], ['engagementRate', 'Engagement', '%']] },
 };
 
-export default function SocialCards({ social }) {
+export default function SocialCards({ social, orgId: orgIdProp }) {
   const navigate = useNavigate();
   const { user } = useAuthStore();
-  const orgId = user?.organization?._id || user?.organization;
+  // Admin dashboards pass the picked org; everyone else falls back to their own.
+  const orgId = orgIdProp || user?.organization?._id || user?.organization;
 
   // LinkedIn values come from the 15-day pulse (same numbers as the LinkedIn
   // view / LinkedIn itself) instead of a single day's snapshot.

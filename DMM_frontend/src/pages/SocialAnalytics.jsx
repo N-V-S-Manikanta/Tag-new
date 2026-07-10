@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Linkedin, Instagram, Youtube, Facebook } from 'lucide-react';
 import { analyticsApi, organizationApi } from '../api/endpoints.js';
@@ -23,6 +23,11 @@ export default function SocialAnalytics() {
 
   const { data: orgData } = useQuery({ queryKey: ['org-options'], queryFn: organizationApi.options });
   const orgs = orgData?.organizations || [];
+  // Admins have no org of their own — default to the first one instead of an
+  // empty page (the select already displays it; keep state in sync).
+  useEffect(() => {
+    if (!orgId && orgs.length) setOrgId(orgs[0]._id);
+  }, [orgId, orgs]);
   const isLinkedIn = platform === 'LinkedIn';
   const { data: report, isLoading } = useQuery({
     queryKey: ['report', platform, orgId],

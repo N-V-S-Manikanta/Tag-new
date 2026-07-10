@@ -11,11 +11,12 @@ const STEPS = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900];
 // Torii Minds (toriiminds.com) — orange/amber accent on dark.
 // NCET (Nagarjuna College of Engineering & Technology) — institutional blue.
 const PALETTES = {
-  torii: ['255 247 237', '255 237 213', '254 215 170', '253 186 116', '251 146 60', '249 115 22', '234 88 12', '194 65 12', '154 52 18', '124 45 18'],
+  torii: ['255 246 241', '255 233 222', '255 207 184', '253 170 133', '247 129 84', '241 93 39', '222 72 19', '184 58 15', '147 49 18', '119 43 19'],
   ncet: ['239 246 255', '219 234 254', '191 219 254', '147 197 253', '96 165 250', '59 130 246', '37 99 235', '29 78 216', '30 64 175', '30 58 138'],
 };
-// Default Tag accent (orange) — used in dark mode when an org has no palette.
-const INDIGO = ['255 247 237', '255 237 213', '254 215 170', '253 186 116', '251 146 60', '249 115 22', '234 88 12', '194 65 12', '154 52 18', '124 45 18'];
+// Default Tag accent — the #f15d27 logo-orange ramp (matches index.css), used
+// in dark mode when an org has no palette of its own.
+const TAG_ORANGE = ['255 246 241', '255 233 222', '255 207 184', '253 170 133', '247 129 84', '241 93 39', '222 72 19', '184 58 15', '147 49 18', '119 43 19'];
 
 const hexToRgb = (hex) => {
   const h = String(hex || '').replace('#', '').trim();
@@ -56,6 +57,6 @@ export const applyBrand = (org, theme) => {
     STEPS.forEach((s) => root.style.removeProperty(`--brand-${s}`));
     return;
   }
-  const palette = pickPalette(org) || INDIGO;
+  const palette = pickPalette(org) || TAG_ORANGE;
   STEPS.forEach((s, i) => root.style.setProperty(`--brand-${s}`, palette[i]));
 };

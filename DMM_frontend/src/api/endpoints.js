@@ -15,6 +15,9 @@ export const userApi = {
   // self
   updateProfile: (formData) =>
     api.put('/users/profile', formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data),
+  completeProfile: (data) => api.put('/users/profile/complete', data).then((r) => r.data),
+  myUpdateRequest: () => api.get('/users/profile/update-request').then((r) => r.data),
+  requestUpdate: (data) => api.post('/users/profile/update-request', data).then((r) => r.data),
   changePassword: (data) => api.put('/users/password', data).then((r) => r.data),
   updateSettings: (data) => api.put('/users/settings', data).then((r) => r.data),
   // admin
@@ -80,11 +83,13 @@ export const planApi = {
 };
 
 // ---- Dashboard ----
+// organizationId matters only for ADMIN accounts (they aren't tied to an org);
+// CEO/USER requests are auto-scoped server-side and ignore the param.
 export const dashboardApi = {
-  stats: () => api.get('/dashboard/stats').then((r) => r.data),
-  charts: () => api.get('/dashboard/charts').then((r) => r.data),
-  activity: () => api.get('/dashboard/activity').then((r) => r.data),
-  topPlatform: () => api.get('/dashboard/top-platform').then((r) => r.data),
+  stats: (organizationId) => api.get('/dashboard/stats', { params: { organizationId: organizationId || undefined } }).then((r) => r.data),
+  charts: (organizationId) => api.get('/dashboard/charts', { params: { organizationId: organizationId || undefined } }).then((r) => r.data),
+  activity: (organizationId) => api.get('/dashboard/activity', { params: { organizationId: organizationId || undefined } }).then((r) => r.data),
+  topPlatform: (organizationId) => api.get('/dashboard/top-platform', { params: { organizationId: organizationId || undefined } }).then((r) => r.data),
   myUploads: () => api.get('/dashboard/my-uploads').then((r) => r.data),
 };
 
@@ -134,6 +139,8 @@ export const approvalApi = {
   resubmit: (id, formData) =>
     api.put(`/approvals/${id}/resubmit`, formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data),
   markPosted: (id) => api.put(`/approvals/${id}/posted`).then((r) => r.data),
+  comment: (id, formData) =>
+    api.post(`/approvals/${id}/comments`, formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data),
   remove: (id) => api.delete(`/approvals/${id}`).then((r) => r.data),
 };
 
@@ -154,6 +161,20 @@ export const eventApi = {
   create: (formData) => api.post('/events', formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data),
   update: (id, formData) => api.put(`/events/${id}`, formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data),
   remove: (id) => api.delete(`/events/${id}`).then((r) => r.data),
+};
+
+// ---- Signage (campus banner stands + their banner change history) ----
+const mpHeaders = { headers: { 'Content-Type': 'multipart/form-data' } };
+export const signageApi = {
+  locations: (params) => api.get('/signage/locations', { params }).then((r) => r.data),
+  createLocation: (formData) => api.post('/signage/locations', formData, mpHeaders).then((r) => r.data),
+  updateLocation: (id, formData) => api.put(`/signage/locations/${id}`, formData, mpHeaders).then((r) => r.data),
+  removeLocation: (id) => api.delete(`/signage/locations/${id}`).then((r) => r.data),
+  banners: (params) => api.get('/signage/banners', { params }).then((r) => r.data),
+  placeBanner: (formData) => api.post('/signage/banners', formData, mpHeaders).then((r) => r.data),
+  updateBanner: (id, formData) => api.put(`/signage/banners/${id}`, formData, mpHeaders).then((r) => r.data),
+  markRemoved: (id) => api.put(`/signage/banners/${id}/remove`).then((r) => r.data),
+  removeBanner: (id) => api.delete(`/signage/banners/${id}`).then((r) => r.data),
 };
 
 // ---- Notifications ----

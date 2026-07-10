@@ -1,24 +1,62 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Building2, Users, Activity, BarChart3, CalendarDays, Settings, X, ShieldCheck, CheckSquare, Images, Share2, ShoppingBag, Target, Globe, Camera, ClipboardList, Sparkles } from 'lucide-react';
+import { LayoutDashboard, Building2, Users, Activity, BarChart3, CalendarDays, Settings, X, ShieldCheck, CheckSquare, Images, Share2, ShoppingBag, Target, Globe, Camera, ClipboardList, Sparkles, Flag } from 'lucide-react';
 import { cn } from '../../lib/utils.js';
 
-const NAV = [
-  { to: '/dashboard', label: 'Overview', icon: LayoutDashboard },
-  { to: '/assistant', label: 'AI Assistant', icon: Sparkles },
-  { to: '/organizations', label: 'Organizations', icon: Building2 },
-  { to: '/users', label: 'User Management', icon: Users },
-  { to: '/approvals', label: 'Approvals', icon: CheckSquare },
-  { to: '/planners', label: 'Post Planners', icon: ClipboardList },
-  { to: '/analytics', label: 'Social Analytics', icon: BarChart3 },
-  { to: '/social-accounts', label: 'Social Handlers', icon: Share2 },
-  { to: '/websites', label: 'Websites', icon: Globe },
-  { to: '/brand-library', label: 'Brand Library', icon: Images },
-  { to: '/events', label: 'Events', icon: Camera },
-  { to: '/purchases', label: 'Premium Packs', icon: ShoppingBag },
-  { to: '/goals', label: 'Growth Goals', icon: Target },
-  { to: '/calendar', label: 'Posting Calendar', icon: CalendarDays },
-  { to: '/activity', label: 'Activity Logs', icon: Activity },
-  { to: '/settings', label: 'Settings', icon: Settings },
+// Navigation grouped by admin duty: running the platform, overseeing content,
+// the approval workflow, results, and org-level management data.
+const NAV_SECTIONS = [
+  {
+    title: null,
+    items: [
+      { to: '/dashboard', label: 'Overview', icon: LayoutDashboard },
+      { to: '/assistant', label: 'Tago AI', icon: Sparkles },
+    ],
+  },
+  {
+    title: 'Administration',
+    items: [
+      { to: '/organizations', label: 'Organizations', icon: Building2 },
+      { to: '/users', label: 'User Management', icon: Users },
+      { to: '/activity', label: 'Activity Logs', icon: Activity },
+    ],
+  },
+  {
+    title: 'Content',
+    items: [
+      { to: '/brand-library', label: 'Brand Library', icon: Images },
+      { to: '/events', label: 'Events', icon: Camera },
+      { to: '/signage', label: 'Signage', icon: Flag },
+    ],
+  },
+  {
+    title: 'Workflow',
+    items: [
+      { to: '/approvals', label: 'Approvals', icon: CheckSquare },
+      { to: '/planners', label: 'Post Planners', icon: ClipboardList },
+      { to: '/calendar', label: 'Posting Calendar', icon: CalendarDays },
+    ],
+  },
+  {
+    title: 'Insights',
+    items: [
+      { to: '/analytics', label: 'Social Analytics', icon: BarChart3 },
+      { to: '/goals', label: 'Growth Goals', icon: Target },
+    ],
+  },
+  {
+    title: 'Management',
+    items: [
+      { to: '/social-accounts', label: 'Social Handlers', icon: Share2 },
+      { to: '/websites', label: 'Websites', icon: Globe },
+      { to: '/purchases', label: 'Premium Packs', icon: ShoppingBag },
+    ],
+  },
+  {
+    title: 'Account',
+    items: [
+      { to: '/settings', label: 'Settings', icon: Settings },
+    ],
+  },
 ];
 
 export default function Sidebar({ open, onClose }) {
@@ -41,12 +79,23 @@ export default function Sidebar({ open, onClose }) {
           <button onClick={onClose} aria-label="Close menu" className="rounded-lg p-1.5 text-slate-300 transition-colors hover:bg-white/10 lg:hidden"><X className="h-5 w-5" /></button>
         </div>
 
-        <nav aria-label="Main navigation" className="flex-1 space-y-1 overflow-y-auto px-4 py-4">
-          {NAV.map(({ to, label, icon: Icon }) => (
-            <NavLink key={to} to={to} onClick={onClose} className={linkClass}>
-              <Icon className="h-[18px] w-[18px] shrink-0" />
-              {label}
-            </NavLink>
+        <nav aria-label="Main navigation" className="flex-1 overflow-y-auto px-4 py-4">
+          {NAV_SECTIONS.map((section, si) => (
+            <div key={section.title || si}>
+              {section.title && (
+                <p className={cn('px-3 pb-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500', si > 0 && 'pt-4')}>
+                  {section.title}
+                </p>
+              )}
+              <div className="space-y-1">
+                {section.items.map(({ to, label, icon: Icon }) => (
+                  <NavLink key={to} to={to} onClick={onClose} className={linkClass}>
+                    <Icon className="h-[18px] w-[18px] shrink-0" />
+                    {label}
+                  </NavLink>
+                ))}
+              </div>
+            </div>
           ))}
         </nav>
       </aside>

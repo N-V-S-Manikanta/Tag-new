@@ -29,6 +29,21 @@ const userSchema = new mongoose.Schema(
     linkedinUrl: { type: String, default: '', trim: true },
     // Skill set, e.g. ["Video Editing", "Photo Editing", "Photography"].
     skills: [{ type: String, trim: true }],
+    // Tools they know, e.g. ["Photoshop", "Premiere Pro", "Canva"].
+    tools: [{ type: String, trim: true }],
+    // Which organizations/pages this person handles, e.g.
+    // { organization: NCET, platforms: ["Instagram", "Facebook"] }.
+    handles: [
+      {
+        organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization' },
+        platforms: [{ type: String, trim: true }],
+        _id: false,
+      },
+    ],
+    // Set the first time the user fills in their profile after account creation.
+    // Until then the product app keeps them on the profile page. Later changes
+    // to skills/tools/handles go through an admin-reviewed update request.
+    profileCompletedAt: { type: Date, default: null },
     isActive: { type: Boolean, default: true },
     settings: {
       theme: { type: String, enum: ['light', 'dark'], default: 'light' },

@@ -7,6 +7,7 @@ import {
 import { userApi, organizationApi } from '../api/endpoints.js';
 import { useAuthStore } from '../store/authStore.js';
 import PageHeader from '../components/layout/PageHeader.jsx';
+import ProfileReviews from '../components/ProfileReviews.jsx';
 import { Button } from '../components/ui/Button.jsx';
 import { Card, Input, Select, Badge, Avatar, Skeleton, EmptyState } from '../components/ui/primitives.jsx';
 import { Modal } from '../components/ui/Modal.jsx';
@@ -55,6 +56,8 @@ export default function Users() {
     <div>
       <PageHeader title="User Management" subtitle={canManage ? 'Create and manage accounts, roles and access.' : 'View accounts and roles. Only the super admin can create or edit accounts.'}
         actions={canManage && <Button onClick={() => setModal({ type: 'create' })}><UserPlus className="h-4 w-4" /> Add User</Button>} />
+
+      <ProfileReviews />
 
       <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
         {stats.map((s) => (

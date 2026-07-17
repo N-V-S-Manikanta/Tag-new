@@ -14,6 +14,8 @@ import Approvals from './pages/Approvals.jsx';
 import ApprovalDetail from './pages/ApprovalDetail.jsx';
 import Analytics from './pages/Analytics.jsx';
 import BrandLibrary from './pages/BrandLibrary.jsx';
+import Templates from './pages/Templates.jsx';
+import Assets from './pages/Assets.jsx';
 import Events from './pages/Events.jsx';
 import Signage from './pages/Signage.jsx';
 import SocialAccounts from './pages/SocialAccounts.jsx';
@@ -25,6 +27,7 @@ import Assistant from './pages/Assistant.jsx';
 import Calendar from './pages/Calendar.jsx';
 import ActivityLogs from './pages/ActivityLogs.jsx';
 import Settings from './pages/Settings.jsx';
+import BrandingRegister from './pages/BrandingRegister.jsx';
 
 export default function App() {
   const { token, fetchMe } = useAuthStore();
@@ -65,8 +68,11 @@ export default function App() {
         <Route path="/approvals/:id" element={<ApprovalDetail />} />
         <Route path="/analytics" element={<Analytics />} />
         <Route path="/brand-library" element={<BrandLibrary />} />
+        <Route path="/templates" element={<Templates />} />
+        <Route path="/assets" element={<Assets />} />
         <Route path="/events" element={<Events />} />
         <Route path="/signage" element={<Signage />} />
+        <Route path="/branding-register" element={<BrandingRegister />} />
         <Route path="/social-accounts" element={<SocialAccounts />} />
         <Route path="/websites" element={<Websites />} />
         <Route path="/purchases" element={<Purchases />} />

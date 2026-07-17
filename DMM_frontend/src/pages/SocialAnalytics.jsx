@@ -6,6 +6,7 @@ import { useAuthStore } from '../store/authStore.js';
 import PageHeader from '../components/layout/PageHeader.jsx';
 import AnalyticsReport from '../components/AnalyticsReport.jsx';
 import LinkedInView from '../components/LinkedInView.jsx';
+import ActivityHeatmap from '../components/ActivityHeatmap.jsx';
 import { cn } from '../lib/utils.js';
 
 const PLATFORMS = [
@@ -59,6 +60,13 @@ export default function SocialAnalytics() {
         <LinkedInView orgId={orgId} canUpload={canUpload} />
       ) : (
         <AnalyticsReport report={report} isLoading={isLoading} />
+      )}
+
+      {/* 365-day activity heatmap for the selected org + platform */}
+      {orgId && (
+        <div className="mt-5">
+          <ActivityHeatmap orgId={orgId} platform={platform} />
+        </div>
       )}
     </div>
   );

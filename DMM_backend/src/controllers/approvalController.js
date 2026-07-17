@@ -9,7 +9,20 @@ import { createNotification } from '../utils/notify.js';
 import User from '../models/User.js';
 import Organization from '../models/Organization.js';
 import { requireOrgId, resolveOrgId } from '../utils/org.js';
-import { APPROVAL_STATUS, ACTIVITY_ACTIONS, NOTIFICATION_TYPES, ROLES, FEEDBACK_CATEGORIES } from '../config/constants.js';
+import {
+  APPROVAL_STATUS,
+  APPROVAL_TYPES,
+  ACTIVITY_ACTIONS,
+  NOTIFICATION_TYPES,
+  ROLES,
+  USER_TYPES,
+  PLATFORMS,
+  FEEDBACK_CATEGORIES,
+} from '../config/constants.js';
+
+// Legacy requests predate the type field — anything without one is a POST.
+const typeFilter = (type) =>
+  type === APPROVAL_TYPES.DESIGN ? APPROVAL_TYPES.DESIGN : { $in: [APPROVAL_TYPES.POST, null] };
 
 const parseHashtags = (raw) => {
   if (!raw) return [];
@@ -20,18 +33,9 @@ const parseHashtags = (raw) => {
     .filter(Boolean);
 };
 
-// Notify the people responsible for a request: the Admin(s) of the request's
-// target organization (role CEO) AND every Super Admin (who oversee all orgs).
-// Recipients are de-duplicated so a super admin who also heads the org is
-// notified once.
+// Notify super admins (the only approval authority).
 const notifyApprovers = async (type, title, message, request) => {
-  const recipients = await User.find({
-    isActive: true,
-    $or: [
-      { role: ROLES.CEO, organization: request.organization },
-      { isSuperAdmin: true },
-    ],
-  }).select('_id');
+  const recipients = await User.find({ isActive: true, isSuperAdmin: true }).select('_id');
   const seen = new Set();
   await Promise.all(
     recipients
@@ -45,14 +49,22 @@ const notifyApprovers = async (type, title, message, request) => {
   );
 };
 
+const isSuperApprover = (user) => user?.role === ROLES.ADMIN && !!user?.isSuperAdmin;
+
+const isForwardedHandler = (request, userId) =>
+  Array.isArray(request.forwardedHandlers) && request.forwardedHandlers.some((id) => String(id) === String(userId));
+
 // Access guard for a single request:
 //  - ADMIN / Super Admin: any organization (global).
 //  - The request's creator: their own request, in ANY organization (users can
 //    submit for any org in the shared workspace).
+//  - The assigned handler of an approved design (may sit in another org).
 //  - CEO ("Admin" of an org): requests targeting their own organization.
 const assertOrgAccess = (req, res, request) => {
   if (req.user.role === ROLES.ADMIN) return;
   if (String(request.createdBy) === String(req.user._id)) return;
+  if (request.assignedTo && String(request.assignedTo) === String(req.user._id)) return;
+  if (isForwardedHandler(request, req.user._id)) return;
   const orgId = resolveOrgId(req);
   if (orgId && String(request.organization) === String(orgId)) return;
   res.status(404); throw new Error('Request not found');
@@ -84,11 +96,13 @@ const recordFeed = async (docs) => {
 // @route GET /api/approvals  — CEO sees their org, USER sees own, ADMIN sees
 // ALL organizations (head of all orgs). Supports filters.
 export const getApprovals = asyncHandler(async (req, res) => {
-  const { status, platform, search, user, from, to, page = 1, limit = 12 } = req.query;
+  const { status, type, platform, search, user, from, to, page = 1, limit = 12 } = req.query;
   const query = {};
+  const and = [];
   // ADMIN / Super Admin span every organization (optional ?organizationId narrows).
   // CEO ("Admin") sees every request targeting their own organization.
-  // USER sees their own requests across ALL organizations they submitted to.
+  // USER sees their own requests across ALL organizations they submitted to,
+  // PLUS any approved designs assigned to them for publishing.
   if (req.user.role === ROLES.ADMIN) {
     if (req.query.organizationId) query.organization = req.query.organizationId;
     if (user) query.createdBy = user;
@@ -96,20 +110,23 @@ export const getApprovals = asyncHandler(async (req, res) => {
     query.organization = requireOrgId(req, res);
     if (user) query.createdBy = user;
   } else {
-    query.createdBy = req.user._id;
+    and.push({ $or: [{ createdBy: req.user._id }, { assignedTo: req.user._id }, { forwardedHandlers: req.user._id }] });
     if (req.query.organizationId) query.organization = req.query.organizationId;
   }
 
   if (platform && platform !== 'All') query.platform = platform;
-  if (search) query.$or = [
-    { title: { $regex: search, $options: 'i' } },
-    { caption: { $regex: search, $options: 'i' } },
-  ];
+  if (search) and.push({
+    $or: [
+      { title: { $regex: search, $options: 'i' } },
+      { caption: { $regex: search, $options: 'i' } },
+    ],
+  });
   if (from || to) {
     query.createdAt = {};
     if (from) query.createdAt.$gte = new Date(from);
     if (to) query.createdAt.$lte = new Date(`${to}T23:59:59.999Z`);
   }
+  if (and.length) query.$and = and;
 
   // Per-status tab counts use the SAME scope minus the status filter, so the
   // numbers stay stable while the user switches tabs. Ids must be cast for
@@ -121,12 +138,26 @@ export const getApprovals = asyncHandler(async (req, res) => {
   // "REVIEW" is a convenience filter for everything awaiting a decision.
   if (status === 'REVIEW') query.status = { $in: [APPROVAL_STATUS.PENDING, APPROVAL_STATUS.RESUBMITTED] };
   else if (status && status !== 'All') query.status = status;
+  if (type) query.type = typeFilter(type);
 
   const skip = (Number(page) - 1) * Number(limit);
-  const [items, total, statusCounts] = await Promise.all([
-    ApprovalRequest.find(query).populate('createdBy', 'name avatar email').populate('organization', 'name color').sort({ createdAt: -1 }).skip(skip).limit(Number(limit)).lean(),
+  const [items, total, statusCounts, typeCountsAgg] = await Promise.all([
+    ApprovalRequest.find(query)
+      .populate('createdBy', 'name avatar email')
+      .populate('assignedTo', 'name avatar')
+      .populate('organization', 'name color')
+      .sort({ createdAt: -1 }).skip(skip).limit(Number(limit)).lean(),
     ApprovalRequest.countDocuments(query),
-    ApprovalRequest.aggregate([{ $match: countsQuery }, { $group: { _id: '$status', count: { $sum: 1 } } }]),
+    // Status tab counts, scoped to the current type view when one is selected.
+    ApprovalRequest.aggregate([
+      { $match: type ? { ...countsQuery, type: typeFilter(type) } : countsQuery },
+      { $group: { _id: '$status', count: { $sum: 1 } } },
+    ]),
+    // Post/Design sub-tab badges: same scope, ignoring both status and type.
+    ApprovalRequest.aggregate([
+      { $match: countsQuery },
+      { $group: { _id: { $ifNull: ['$type', APPROVAL_TYPES.POST] }, count: { $sum: 1 } } },
+    ]),
   ]);
   const counts = { ALL: 0 };
   Object.values(APPROVAL_STATUS).forEach((s) => { counts[s] = 0; });
@@ -134,8 +165,10 @@ export const getApprovals = asyncHandler(async (req, res) => {
     if (counts[_id] !== undefined) counts[_id] = count;
     counts.ALL += count;
   });
+  const typeCounts = { [APPROVAL_TYPES.POST]: 0, [APPROVAL_TYPES.DESIGN]: 0 };
+  typeCountsAgg.forEach(({ _id, count }) => { if (typeCounts[_id] !== undefined) typeCounts[_id] += count; });
   const withImages = await attachImages(items);
-  res.json({ success: true, total, page: Number(page), pages: Math.ceil(total / limit), counts, requests: withImages });
+  res.json({ success: true, total, page: Number(page), pages: Math.ceil(total / limit), counts, typeCounts, requests: withImages });
 });
 
 // @route GET /api/approvals/:id
@@ -144,13 +177,25 @@ export const getApproval = asyncHandler(async (req, res) => {
     .populate('createdBy', 'name avatar email')
     .populate('approvedBy', 'name')
     .populate('postedBy', 'name')
+    .populate('assignedTo', 'name avatar email')
+    .populate('assignedBy', 'name')
+    .populate('forwardedBy', 'name')
+    .populate('forwardedTargets.organization', 'name color')
+    .populate('forwardedTargets.handlers', 'name avatar email')
+    .populate('linkedPost', 'title status type')
+    .populate('sourceDesign', 'title status type')
     .populate('organization', 'name color')
     .populate('reviews.reviewedBy', 'name avatar')
     .lean();
   if (!reqDoc) { res.status(404); throw new Error('Request not found'); }
-  assertOrgAccess(req, res, { ...reqDoc, organization: reqDoc.organization?._id || reqDoc.organization });
+  assertOrgAccess(req, res, {
+    ...reqDoc,
+    organization: reqDoc.organization?._id || reqDoc.organization,
+    assignedTo: reqDoc.assignedTo?._id || reqDoc.assignedTo,
+  });
   const privileged = [ROLES.ADMIN, ROLES.CEO].includes(req.user.role);
-  if (!privileged && String(reqDoc.createdBy._id) !== String(req.user._id)) {
+  const isAssignee = reqDoc.assignedTo && String(reqDoc.assignedTo._id || reqDoc.assignedTo) === String(req.user._id);
+  if (!privileged && !isAssignee && String(reqDoc.createdBy._id) !== String(req.user._id)) {
     res.status(403); throw new Error('Not allowed to view this request');
   }
   const [images, comments] = await Promise.all([
@@ -163,8 +208,9 @@ export const getApproval = asyncHandler(async (req, res) => {
 
 // @route POST /api/approvals  — create new request (status PENDING)
 export const createApproval = asyncHandler(async (req, res) => {
-  const { title, platform, caption, description, hashtags, order, aspectRatio, organization } = req.body;
+  const { title, platform, caption, description, hashtags, order, aspectRatio, organization, type, sourceDesign } = req.body;
   if (!title || !platform) { res.status(400); throw new Error('Title and platform are required'); }
+  const reqType = type === APPROVAL_TYPES.DESIGN ? APPROVAL_TYPES.DESIGN : APPROVAL_TYPES.POST;
 
   // Any user can submit a request for ANY organization. The target org comes
   // from the form (organization); falls back to the user's own org if omitted.
@@ -173,14 +219,49 @@ export const createApproval = asyncHandler(async (req, res) => {
   const org = await Organization.findById(orgId).select('_id isActive');
   if (!org || !org.isActive) { res.status(400); throw new Error('Selected organization does not exist'); }
 
+  // A POST raised from an approved design: verify the link and the assignee.
+  let design = null;
+  if (reqType === APPROVAL_TYPES.POST && sourceDesign) {
+    design = await ApprovalRequest.findById(sourceDesign);
+    if (!design || design.type !== APPROVAL_TYPES.DESIGN) { res.status(400); throw new Error('Source design not found'); }
+    if (design.status !== APPROVAL_STATUS.APPROVED) { res.status(400); throw new Error('The source design is not approved yet'); }
+    if (design.linkedPost) { res.status(400); throw new Error('A post request already exists for this design'); }
+    const isAssignee = design.assignedTo && String(design.assignedTo) === String(req.user._id);
+    const isForwarded = isForwardedHandler(design, req.user._id);
+    if (!isAssignee && !isForwarded && ![ROLES.ADMIN, ROLES.CEO].includes(req.user.role)) {
+      res.status(403); throw new Error('This design is not assigned to you');
+    }
+
+    // Social handlers can only raise posts for org/platform pairs forwarded to them.
+    if (req.user.role === ROLES.USER && req.user.userType === USER_TYPES.SOCIAL_HANDLER && Array.isArray(design.forwardedTargets)) {
+      const target = design.forwardedTargets.find((t) =>
+        String(t.organization) === String(orgId)
+        && t.platform === platform
+        && (t.handlers || []).some((h) => String(h) === String(req.user._id))
+      );
+      if (!target) {
+        res.status(403);
+        throw new Error('You are not assigned to publish this design for the selected organization/platform');
+      }
+    }
+  }
+
   const request = await ApprovalRequest.create({
     organization: orgId,
     title, platform, caption, description,
+    type: reqType,
+    sourceDesign: design ? design._id : null,
     aspectRatio: aspectRatio || '',
     hashtags: parseHashtags(hashtags),
     status: APPROVAL_STATUS.PENDING,
     createdBy: req.user._id,
   });
+
+  if (design) {
+    design.linkedPost = request._id;
+    await design.save();
+    await recordFeed({ request: design._id, kind: 'event', author: req.user._id, text: `created the post request "${title}" from this design` });
+  }
 
   // `order` (optional) is a parallel array of indices matching the uploaded files,
   // letting the client control gallery order. Falls back to upload order.
@@ -197,8 +278,9 @@ export const createApproval = asyncHandler(async (req, res) => {
   request.imageCount = imageDocs.length;
   await request.save();
 
-  logActivity({ user: req.user._id, organization: orgId, action: ACTIVITY_ACTIONS.APPROVAL_SUBMISSION, description: `Submitted approval request "${title}"`, entityType: 'ApprovalRequest', entityId: request._id });
-  await notifyApprovers(NOTIFICATION_TYPES.NEW_REQUEST, 'New approval request', `${req.user.name} submitted "${title}"`, request);
+  const kindLabel = reqType === APPROVAL_TYPES.DESIGN ? 'design' : 'post';
+  logActivity({ user: req.user._id, organization: orgId, action: ACTIVITY_ACTIONS.APPROVAL_SUBMISSION, description: `Submitted ${kindLabel} approval request "${title}"`, entityType: 'ApprovalRequest', entityId: request._id });
+  await notifyApprovers(NOTIFICATION_TYPES.NEW_REQUEST, `New ${kindLabel} approval request`, `${req.user.name} submitted "${title}"`, request);
 
   const images = await ApprovalImage.find({ request: request._id }).sort({ order: 1 }).lean();
   res.status(201).json({ success: true, request: { ...request.toObject(), images } });
@@ -206,6 +288,7 @@ export const createApproval = asyncHandler(async (req, res) => {
 
 // @route PUT /api/approvals/:id/approve  (CEO)
 export const approveRequest = asyncHandler(async (req, res) => {
+  if (!isSuperApprover(req.user)) { res.status(403); throw new Error('Only super admin can approve requests'); }
   const request = await ApprovalRequest.findById(req.params.id);
   if (!request) { res.status(404); throw new Error('Request not found'); }
   assertOrgAccess(req, res, request);
@@ -229,6 +312,7 @@ export const approveRequest = asyncHandler(async (req, res) => {
 
 // @route PUT /api/approvals/:id/reject  (CEO) — body: { feedbackPoints: [] }
 export const rejectRequest = asyncHandler(async (req, res) => {
+  if (!isSuperApprover(req.user)) { res.status(403); throw new Error('Only super admin can reject requests'); }
   const request = await ApprovalRequest.findById(req.params.id);
   if (!request) { res.status(404); throw new Error('Request not found'); }
   assertOrgAccess(req, res, request);
@@ -325,6 +409,7 @@ export const markPosted = asyncHandler(async (req, res) => {
   if (!request) { res.status(404); throw new Error('Request not found'); }
   assertOrgAccess(req, res, request);
   if (String(request.createdBy) !== String(req.user._id)) { res.status(403); throw new Error('Not allowed'); }
+  if (request.type === APPROVAL_TYPES.DESIGN) { res.status(400); throw new Error('Designs are published through their linked post request'); }
   if (request.status !== APPROVAL_STATUS.APPROVED) { res.status(400); throw new Error('Only approved content can be marked as posted'); }
 
   request.status = APPROVAL_STATUS.POSTED;
@@ -335,10 +420,137 @@ export const markPosted = asyncHandler(async (req, res) => {
   // Durable status-change marker in the request's activity feed.
   await recordFeed({ request: request._id, kind: 'event', author: req.user._id, text: `marked as posted on ${request.platform}` });
 
+  // Publishing the post completes its source design's lifecycle too.
+  if (request.sourceDesign) {
+    const design = await ApprovalRequest.findById(request.sourceDesign);
+    if (design && design.status !== APPROVAL_STATUS.POSTED) {
+      design.status = APPROVAL_STATUS.POSTED;
+      design.postedAt = request.postedAt;
+      design.postedBy = req.user._id;
+      await design.save();
+      await recordFeed({ request: design._id, kind: 'event', author: req.user._id, text: `the linked post went live on ${request.platform}` });
+    }
+  }
+
   logActivity({ user: req.user._id, organization: request.organization, action: ACTIVITY_ACTIONS.POST_COMPLETION, description: `Marked "${request.title}" as posted`, entityType: 'ApprovalRequest', entityId: request._id });
   await notifyApprovers(NOTIFICATION_TYPES.CONTENT_POSTED, 'Content posted', `${req.user.name} posted "${request.title}" on ${request.platform}`, request);
 
   res.json({ success: true, request });
+});
+
+// @route PUT /api/approvals/:id/assign  (CEO/ADMIN) — hand an approved design
+// to a social-media handler. Body: { userId }. Re-assignment is allowed until
+// the handler has raised the linked post request.
+export const assignRequest = asyncHandler(async (req, res) => {
+  const request = await ApprovalRequest.findById(req.params.id);
+  if (!request) { res.status(404); throw new Error('Request not found'); }
+  assertOrgAccess(req, res, request);
+  if (request.type !== APPROVAL_TYPES.DESIGN) { res.status(400); throw new Error('Only design requests can be assigned'); }
+  if (request.status !== APPROVAL_STATUS.APPROVED) { res.status(400); throw new Error('Approve the design before assigning it'); }
+  if (request.linkedPost) { res.status(400); throw new Error('A post request was already created from this design'); }
+
+  const assignee = await User.findOne({ _id: req.body.userId, isActive: true }).select('name');
+  if (!assignee) { res.status(400); throw new Error('Selected user not found'); }
+
+  request.assignedTo = assignee._id;
+  request.assignedBy = req.user._id;
+  request.assignedAt = new Date();
+  await request.save();
+
+  await recordFeed({ request: request._id, kind: 'event', author: req.user._id, text: `assigned this design to ${assignee.name} for ${request.platform}` });
+  logActivity({ user: req.user._id, organization: request.organization, action: ACTIVITY_ACTIONS.DESIGN_ASSIGNED, description: `Assigned design "${request.title}" to ${assignee.name}`, entityType: 'ApprovalRequest', entityId: request._id });
+  await createNotification({
+    recipient: assignee._id, organization: request.organization, type: NOTIFICATION_TYPES.DESIGN_ASSIGNED,
+    title: 'Design assigned to you', message: `${req.user.name} assigned "${request.title}" to you — raise the ${request.platform} post request when ready`,
+    link: `/approvals/${request._id}`, relatedRequest: request._id,
+  });
+
+  const populated = await ApprovalRequest.findById(request._id)
+    .populate('assignedTo', 'name avatar email')
+    .populate('assignedBy', 'name')
+    .lean();
+  res.json({ success: true, request: populated });
+});
+
+// @route PUT /api/approvals/:id/forward  (super admin)
+// Body: { targets: [{ organization, platform, handlerIds: [] }] }
+export const forwardRequest = asyncHandler(async (req, res) => {
+  if (!isSuperApprover(req.user)) { res.status(403); throw new Error('Only super admin can forward approved designs'); }
+
+  const request = await ApprovalRequest.findById(req.params.id);
+  if (!request) { res.status(404); throw new Error('Request not found'); }
+  assertOrgAccess(req, res, request);
+  if (request.type !== APPROVAL_TYPES.DESIGN) { res.status(400); throw new Error('Only design requests can be forwarded'); }
+  if (request.status !== APPROVAL_STATUS.APPROVED) { res.status(400); throw new Error('Approve the design before forwarding'); }
+
+  const rawTargets = Array.isArray(req.body.targets) ? req.body.targets : [];
+  if (!rawTargets.length) { res.status(400); throw new Error('At least one target organization/platform is required'); }
+
+  const normalized = [];
+  const uniqueHandlers = new Set();
+  for (const t of rawTargets) {
+    if (!t?.organization || !t?.platform || !PLATFORMS.includes(t.platform)) {
+      res.status(400);
+      throw new Error('Each target requires a valid organization and platform');
+    }
+    const org = await Organization.findOne({ _id: t.organization, isActive: true }).select('_id');
+    if (!org) { res.status(400); throw new Error('One or more selected organizations are invalid'); }
+
+    const handlerIds = Array.isArray(t.handlerIds) ? [...new Set(t.handlerIds.map(String))] : [];
+    if (!handlerIds.length) { res.status(400); throw new Error('Each target must include at least one social handler'); }
+
+    const handlers = await User.find({
+      _id: { $in: handlerIds },
+      isActive: true,
+      role: ROLES.USER,
+      userType: USER_TYPES.SOCIAL_HANDLER,
+      handles: { $elemMatch: { organization: org._id, platforms: t.platform } },
+    }).select('_id name');
+    if (handlers.length !== handlerIds.length) {
+      res.status(400);
+      throw new Error('Some selected handlers are not mapped to the target organization/platform');
+    }
+
+    handlers.forEach((h) => uniqueHandlers.add(String(h._id)));
+    normalized.push({ organization: org._id, platform: t.platform, handlers: handlers.map((h) => h._id) });
+  }
+
+  request.deliveryMode = 'DIGITAL';
+  request.forwardedTargets = normalized;
+  request.forwardedHandlers = Array.from(uniqueHandlers);
+  request.forwardedBy = req.user._id;
+  request.forwardedAt = new Date();
+  await request.save();
+
+  await recordFeed({ request: request._id, kind: 'event', author: req.user._id, text: `forwarded this approved design to ${uniqueHandlers.size} social handler(s)` });
+  logActivity({
+    user: req.user._id,
+    organization: request.organization,
+    action: ACTIVITY_ACTIONS.DESIGN_FORWARDED,
+    description: `Forwarded design "${request.title}" to social handlers`,
+    entityType: 'ApprovalRequest',
+    entityId: request._id,
+  });
+
+  await Promise.all(
+    Array.from(uniqueHandlers).map((id) =>
+      createNotification({
+        recipient: id,
+        organization: request.organization,
+        type: NOTIFICATION_TYPES.CONTENT_FORWARDED,
+        title: 'Approved design forwarded to you',
+        message: `${req.user.name} forwarded "${request.title}" for publishing preparation`,
+        link: `/approvals/${request._id}`,
+        relatedRequest: request._id,
+      })
+    )
+  );
+
+  const populated = await ApprovalRequest.findById(request._id)
+    .populate('forwardedTargets.organization', 'name color')
+    .populate('forwardedTargets.handlers', 'name avatar email')
+    .lean();
+  res.json({ success: true, request: populated });
 });
 
 // @route POST /api/approvals/:id/comments  — chat message on the request's
@@ -350,7 +562,8 @@ export const addComment = asyncHandler(async (req, res) => {
   assertOrgAccess(req, res, request);
   const privileged = [ROLES.ADMIN, ROLES.CEO].includes(req.user.role);
   const isOwner = String(request.createdBy) === String(req.user._id);
-  if (!privileged && !isOwner) { res.status(403); throw new Error('Not allowed to comment on this request'); }
+  const isForwarded = isForwardedHandler(request, req.user._id);
+  if (!privileged && !isOwner && !isForwarded) { res.status(403); throw new Error('Not allowed to comment on this request'); }
 
   const text = String(req.body.text || '').trim();
   const files = req.files || [];

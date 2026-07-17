@@ -47,6 +47,19 @@ export const userApi = {
   reviewProfileRequest: (id, action, note) => api.put(`/users/profile-requests/${id}`, { action, note }).then((r) => r.data),
 };
 
+export const workAssignmentApi = {
+  list: (params) => api.get('/work-assignments', { params }).then((r) => r.data),
+  create: (data) => api.post('/work-assignments', data).then((r) => r.data),
+};
+
+export const brandingRegisterApi = {
+  list: (params) => api.get('/branding-register', { params }).then((r) => r.data),
+  create: (data) => api.post('/branding-register', data).then((r) => r.data),
+  update: (id, data) => api.put(`/branding-register/${id}`, data).then((r) => r.data),
+  remove: (id) => api.delete(`/branding-register/${id}`).then((r) => r.data),
+  seed: () => api.post('/branding-register/seed').then((r) => r.data),
+};
+
 // Org-scoped calls — the active org is attached as x-organization-id by the client.
 export const analyticsApi = {
   get: (organizationId) => api.get('/analytics', { params: { organizationId } }).then((r) => r.data),
@@ -80,6 +93,11 @@ export const metaApi = {
   map: (organization, pageId) => api.post('/meta/map', { organizationId: organization, pageId }).then((r) => r.data),
   automap: () => api.post('/meta/automap').then((r) => r.data),
   sync: (organizationId, platform) => api.post('/meta/sync', { platform }, { params: { organizationId, platform } }).then((r) => r.data),
+  adsStatus: () => api.get('/meta/ads/status').then((r) => r.data),
+  adsAccounts: () => api.get('/meta/ads/accounts').then((r) => r.data),
+  adsMap: (organizationId, adAccountId) => api.post('/meta/ads/map', { organizationId, adAccountId }).then((r) => r.data),
+  adsSync: (organizationId, from, to) => api.post('/meta/ads/sync', { from, to }, { params: { organizationId, from, to } }).then((r) => r.data),
+  adsReport: (organizationId, range) => api.get('/meta/ads/report', { params: { organizationId, range } }).then((r) => r.data),
 };
 
 // YouTube live sync (Data API v3). The API key lives only in the backend env.
@@ -109,6 +127,10 @@ export const approvalApi = {
   get: (id) => api.get(`/approvals/${id}`).then((r) => r.data),
   approve: (id) => api.put(`/approvals/${id}/approve`).then((r) => r.data),
   reject: (id, feedbackPoints) => api.put(`/approvals/${id}/reject`, { feedbackPoints }).then((r) => r.data),
+  // Design → post pipeline: hand an approved design to a platform handler.
+  assign: (id, userId) => api.put(`/approvals/${id}/assign`, { userId }).then((r) => r.data),
+  forward: (id, targets) => api.put(`/approvals/${id}/forward`, { targets }).then((r) => r.data),
+  handlers: (organizationId, platform) => api.get('/users/handlers', { params: { organizationId, platform } }).then((r) => r.data),
   comment: (id, formData) =>
     api.post(`/approvals/${id}/comments`, formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data),
   remove: (id) => api.delete(`/approvals/${id}`).then((r) => r.data),
@@ -119,6 +141,12 @@ export const approvalApi = {
 export const aiApi = {
   status: () => api.get('/ai/status').then((r) => r.data),
   chat: (messages) => api.post('/ai/chat', { messages }).then((r) => r.data),
+  // Generate on-brand caption/hashtags/description from a short brief.
+  draft: (payload) => api.post('/ai/draft', payload).then((r) => r.data),
+  // Plain-English read-out of an organization's analytics (server-cached 6h).
+  insights: (organization, refresh = false) => api.post('/ai/insights', { organization, refresh }).then((r) => r.data),
+  // Pre-approval quality review of a post's copy (approvers only).
+  review: (approvalId) => api.post('/ai/review', { approvalId }).then((r) => r.data),
 };
 
 // Open-Graph link preview (thumbnail/title) for external links.
@@ -164,6 +192,31 @@ export const brandApi = {
   remove: (id) => api.delete(`/brand/${id}`).then((r) => r.data),
 };
 
+// Template Repository — reusable marketing templates (upload for all; remove/edit super admin only).
+export const templateApi = {
+  list: (params) => api.get('/templates', { params }).then((r) => r.data),
+  get: (id) => api.get(`/templates/${id}`).then((r) => r.data),
+  create: (formData) => api.post('/templates', formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data),
+  update: (id, formData) => api.put(`/templates/${id}`, formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data),
+  remove: (id) => api.delete(`/templates/${id}`).then((r) => r.data),
+  download: (id) => api.post(`/templates/${id}/download`).then((r) => r.data),
+};
+
+// Asset Library — reusable branding assets (upload for all; remove/edit super admin only).
+export const assetApi = {
+  list: (params) => api.get('/assets', { params }).then((r) => r.data),
+  get: (id) => api.get(`/assets/${id}`).then((r) => r.data),
+  create: (formData) => api.post('/assets', formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data),
+  update: (id, formData) => api.put(`/assets/${id}`, formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data),
+  remove: (id) => api.delete(`/assets/${id}`).then((r) => r.data),
+  download: (id) => api.post(`/assets/${id}/download`).then((r) => r.data),
+};
+
+// Organizations dropdown options (id + name + color) for pickers.
+export const organizationOptionsApi = {
+  options: () => api.get('/organizations/options').then((r) => r.data),
+};
+
 // Social media accounts / handlers directory.
 export const socialAccountApi = {
   list: (params) => api.get('/social-accounts', { params }).then((r) => r.data),
@@ -191,4 +244,6 @@ export const calendarApi = {
 
 export const activityApi = {
   list: (params) => api.get('/activity', { params }).then((r) => r.data),
+  heatmap: (params) => api.get('/activity/heatmap', { params }).then((r) => r.data),
+  day: (date, organizationId) => api.get('/activity/day', { params: { date, organizationId } }).then((r) => r.data),
 };

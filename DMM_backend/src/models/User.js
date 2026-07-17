@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
-import { ROLES } from '../config/constants.js';
+import { ROLES, USER_TYPES } from '../config/constants.js';
 
 const userSchema = new mongoose.Schema(
   {
@@ -15,6 +15,8 @@ const userSchema = new mongoose.Schema(
     },
     password: { type: String, required: true, minlength: 6, select: false },
     role: { type: String, enum: Object.values(ROLES), default: ROLES.USER },
+    // Sub-type inside USER role to model the two operational personas.
+    userType: { type: String, enum: Object.values(USER_TYPES), default: undefined },
     // The single built-in super admin. Only this account can create/edit other
     // admins, users and organizations. Seeded on startup; never set via the API.
     isSuperAdmin: { type: Boolean, default: false },

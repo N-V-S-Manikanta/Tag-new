@@ -4,6 +4,7 @@ import morgan from 'morgan';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
+import { UPLOAD_ROOT } from './config/storage.js';
 import { notFound, errorHandler } from './middleware/error.js';
 import authRoutes from './routes/authRoutes.js';
 import userRoutes from './routes/userRoutes.js';
@@ -32,6 +33,8 @@ import goalRoutes from './routes/goalRoutes.js';
 import planRoutes from './routes/planRoutes.js';
 import aiRoutes from './routes/aiRoutes.js';
 import linkedinRoutes from './routes/linkedinRoutes.js';
+import workAssignmentRoutes from './routes/workAssignmentRoutes.js';
+import brandingRegisterRoutes from './routes/brandingRegisterRoutes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -57,8 +60,9 @@ app.use(express.json({ limit: '5mb' }));
 app.use(express.urlencoded({ extended: true }));
 if (process.env.NODE_ENV !== 'production') app.use(morgan('dev'));
 
-// Serve locally-stored uploads
-app.use('/uploads', express.static(path.resolve(__dirname, '../uploads')));
+// Serve locally-stored uploads from the configured storage root (local `uploads`
+// folder in dev, or the mounted volume like /mnt/tag-storage in production).
+app.use('/uploads', express.static(UPLOAD_ROOT));
 
 app.get('/api/health', (req, res) =>
   res.json({ success: true, status: 'ok', service: 'dmm-backend', time: new Date().toISOString() })
@@ -84,6 +88,8 @@ app.use('/api/goals', goalRoutes);
 app.use('/api/plans', planRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/linkedin', linkedinRoutes);
+app.use('/api/work-assignments', workAssignmentRoutes);
+app.use('/api/branding-register', brandingRegisterRoutes);
 app.use('/api/competitors', competitorRoutes);
 app.use('/api/purchases', purchaseRoutes);
 app.use('/api/brand', brandAssetRoutes);

@@ -1,6 +1,7 @@
 import express from 'express';
 import {
   getUsers,
+  listHandlers,
   createUser,
   getUser,
   updateUser,
@@ -28,6 +29,10 @@ router.put('/profile/complete', completeProfile);
 router.route('/profile/update-request').get(myProfileRequest).post(requestProfileUpdate);
 router.put('/password', changePassword);
 router.put('/settings', updateSettings);
+
+// Social-media handlers of an org (for assigning approved designs).
+// Registered before '/:id' so the path isn't swallowed by the param route.
+router.get('/handlers', authorize(ROLES.ADMIN, ROLES.CEO), listHandlers);
 
 // Profile update review queue (ADMIN). Registered before '/:id' so the path
 // isn't swallowed by the param route.

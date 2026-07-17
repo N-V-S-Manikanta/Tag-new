@@ -8,9 +8,9 @@ import { ACTIVITY_ACTIONS, ROLES } from '../config/constants.js';
 
 const extOf = (name = '') => (name.split('.').pop() || '').toUpperCase();
 
-// May this user edit/delete the item? The uploader, the org CEO or an Admin.
-const canManage = (user, item) =>
-  String(item.uploadedBy) === String(user._id) || user.role === ROLES.CEO || user.role === ROLES.ADMIN;
+// Only the built-in super admin may edit or remove repository items. Everyone
+// else can upload (create) and download, but not modify or delete.
+const canManage = (user) => user?.role === ROLES.ADMIN && !!user?.isSuperAdmin;
 
 // Resolve the college a repository item is for, from the upload form.
 // '' / 'shared' → shared across all colleges (organization: null).
@@ -89,9 +89,9 @@ export const createAsset = asyncHandler(async (req, res) => {
 export const updateAsset = asyncHandler(async (req, res) => {
   const asset = await Asset.findById(req.params.id);
   if (!asset) { res.status(404); throw new Error('Asset not found'); }
-  // Only the uploader, the CEO or an Admin can edit (shared workspace).
-  if (!canManage(req.user, asset)) {
-    res.status(403); throw new Error('Not allowed to edit this asset');
+  // Only the super admin can edit repository items.
+  if (!canManage(req.user)) {
+    res.status(403); throw new Error('Only the super admin can edit assets');
   }
   const { name, description, category, organization } = req.body;
   if (name) asset.name = name;
@@ -120,8 +120,8 @@ export const updateAsset = asyncHandler(async (req, res) => {
 export const deleteAsset = asyncHandler(async (req, res) => {
   const asset = await Asset.findById(req.params.id);
   if (!asset) { res.status(404); throw new Error('Asset not found'); }
-  if (!canManage(req.user, asset)) {
-    res.status(403); throw new Error('Not allowed to delete this asset');
+  if (!canManage(req.user)) {
+    res.status(403); throw new Error('Only the super admin can delete assets');
   }
   if (asset.filePublicId) await deleteFile(asset.filePublicId);
   if (asset.previewPublicId && asset.previewPublicId !== asset.filePublicId) await deleteFile(asset.previewPublicId);

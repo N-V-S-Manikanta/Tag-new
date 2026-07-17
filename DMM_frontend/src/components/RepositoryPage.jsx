@@ -57,7 +57,8 @@ export default function RepositoryPage({ cfg }) {
     } catch { toast.error('Download failed'); }
   };
 
-  const canManage = (item) => ['CEO', 'ADMIN'].includes(user?.role) || item.uploadedBy?._id === user?._id || item.uploadedBy === user?._id;
+  // Only the super admin can edit or remove items; everyone else uploads/downloads only.
+  const canManage = () => user?.role === 'ADMIN' && !!user?.isSuperAdmin;
 
   const openEdit = (item) => { setEditItem(item); setModalOpen(true); };
   const confirmDelete = (item) => window.confirm(`Delete "${item.name}"?`) && removeMut.mutate(item._id);
@@ -137,7 +138,7 @@ export default function RepositoryPage({ cfg }) {
                         <Avatar src={item.uploadedBy?.avatar} name={item.uploadedBy?.name} size="sm" />
                         <span className="text-xs text-slate-400">{formatDate(item.createdAt)}</span>
                       </div>
-                      {canManage(item) && (
+                      {canManage() && (
                         <div className="flex gap-1">
                           <button onClick={() => openEdit(item)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"><Pencil className="h-4 w-4" /></button>
                           <button onClick={() => confirmDelete(item)} className="rounded-lg p-1.5 text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10"><Trash2 className="h-4 w-4" /></button>
@@ -196,7 +197,7 @@ export default function RepositoryPage({ cfg }) {
                     <td className="px-3 py-2.5">
                       <span className="flex justify-end gap-1">
                         <button onClick={() => handleDownload(item)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800" title="Download"><Download className="h-4 w-4" /></button>
-                        {canManage(item) && (
+                        {canManage() && (
                           <>
                             <button onClick={() => openEdit(item)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800" title="Edit"><Pencil className="h-4 w-4" /></button>
                             <button onClick={() => confirmDelete(item)} className="rounded-lg p-1.5 text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10" title="Delete"><Trash2 className="h-4 w-4" /></button>
@@ -214,7 +215,13 @@ export default function RepositoryPage({ cfg }) {
 
       {modalOpen && (
         <UploadModal cfg={cfg} editItem={editItem} orgs={orgs} user={user} onClose={() => setModalOpen(false)}
-          onSaved={() => { setModalOpen(false); qc.invalidateQueries({ queryKey: [cfg.key] }); }} />
+          onSaved={() => {
+            setModalOpen(false);
+            qc.invalidateQueries({ queryKey: [cfg.key] });
+            qc.invalidateQueries({ queryKey: ['activity-heatmap'] });
+            qc.invalidateQueries({ queryKey: ['activity-day'] });
+            qc.invalidateQueries({ queryKey: ['dashboard', 'activity'] });
+          }} />
       )}
 
       {/* Preview modal */}

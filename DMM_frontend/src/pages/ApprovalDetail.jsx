@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import {
   ArrowLeft, Check, X, Send, RefreshCw, Plus, Trash2, MessageSquareWarning,
-  CheckCircle2, Hash, Play, Paperclip, FilePlus2,
+  CheckCircle2, Hash, Play, Paperclip, FilePlus2, UserCheck, Palette,
 } from 'lucide-react';
 import { approvalApi } from '../api/endpoints.js';
 import { useAuthStore } from '../store/authStore.js';
@@ -12,6 +12,7 @@ import { Button } from '../components/ui/Button.jsx';
 import { Card, Badge, Avatar, Skeleton, Input } from '../components/ui/primitives.jsx';
 import { Modal } from '../components/ui/Modal.jsx';
 import FileDropzone from '../components/ui/FileDropzone.jsx';
+import ReviewAssist from '../components/approvals/ReviewAssist.jsx';
 import { cn, formatDate, formatDateTime, timeAgo, isVideo } from '../lib/utils.js';
 
 export default function ApprovalDetail() {
@@ -19,8 +20,8 @@ export default function ApprovalDetail() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const { user } = useAuthStore();
-  // Approve/reject mirror the backend route gate: CEO ("Admin" of an org) + Super Admin.
-  const privileged = ['ADMIN', 'CEO'].includes(user?.role);
+  // Approve/reject mirror the backend route gate: super admin only.
+  const privileged = !!user?.isSuperAdmin;
 
   const [activeImg, setActiveImg] = useState(0);
   const [lightbox, setLightbox] = useState(null);
@@ -64,7 +65,7 @@ export default function ApprovalDetail() {
   // Clamp: a resubmission can shrink the list below the selected thumbnail index.
   const shownImg = images[Math.min(activeImg, images.length - 1)];
   const canReview = privileged && ['PENDING', 'RESUBMITTED'].includes(r.status);
-  const canDelete = isOwner || privileged;
+  const canDelete = isOwner || ['ADMIN', 'CEO'].includes(user?.role);
 
   return (
     <div>
@@ -77,6 +78,11 @@ export default function ApprovalDetail() {
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2.5">
             <h1 className="text-2xl font-extrabold tracking-tight text-slate-800 dark:text-white">{r.title}</h1>
+            <Badge className={r.type === 'DESIGN'
+              ? 'bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300'
+              : 'bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300'}>
+              {r.type === 'DESIGN' ? 'Design' : 'Post'}
+            </Badge>
             <Badge status={r.status}>{r.status}</Badge>
           </div>
           <p className="mt-1 text-sm text-slate-400">Request #{String(r._id).slice(-6).toUpperCase()} · Updated {formatDateTime(r.updatedAt)}</p>
@@ -91,7 +97,7 @@ export default function ApprovalDetail() {
           {isOwner && r.status === 'REJECTED' && (
             <Button onClick={() => setResubmitOpen(true)}><RefreshCw className="h-4 w-4" /> Edit & Resubmit</Button>
           )}
-          {isOwner && r.status === 'APPROVED' && (
+          {isOwner && r.status === 'APPROVED' && r.type !== 'DESIGN' && (
             <Button loading={postedMut.isPending} onClick={() => postedMut.mutate()}><Send className="h-4 w-4" /> Mark as Posted</Button>
           )}
           {canDelete && (
@@ -104,10 +110,15 @@ export default function ApprovalDetail() {
       </div>
 
       <div className="grid gap-5 lg:grid-cols-3">
-        {/* Left: lifecycle + details + media */}
+        {/* Left: lifecycle + assignment + details + media */}
         <div className="space-y-5 lg:col-span-2">
           <LifecycleCard r={r} isOwner={isOwner} />
-          <PostDetailsCard r={r} />
+          {r.type === 'DESIGN' && (
+            <AssignmentCard r={r} user={user} privileged={privileged} onChanged={invalidate} navigate={navigate} />
+          )}
+          {/* Pre-approval AI quality check — posts awaiting a decision only */}
+          {r.type !== 'DESIGN' && canReview && <ReviewAssist approvalId={id} />}
+          <PostDetailsCard r={r} navigate={navigate} />
 
           {/* Media gallery */}
           <Card className="overflow-hidden">
@@ -149,24 +160,38 @@ export default function ApprovalDetail() {
   );
 }
 
-// ---- Approval lifecycle: Submitted -> In review -> Approved -> Posted ----
+// ---- Approval lifecycle ----
+// POST:   Submitted -> In review -> Approved -> Posted
+// DESIGN: Submitted -> In review -> Approved -> Assigned -> Posted (via linked post)
 function LifecycleCard({ r, isOwner }) {
   const rejected = r.status === 'REJECTED';
   const resubmitted = r.status === 'RESUBMITTED';
+  const isDesign = r.type === 'DESIGN';
   // Furthest stage reached (Submitted is always reached).
-  const stageIdx = r.status === 'POSTED' ? 3 : r.status === 'APPROVED' ? 2 : 1;
-  const percent = (stageIdx + 1) * 25;
-  const steps = [
-    { label: 'Submitted', date: r.createdAt },
-    {
-      label: rejected ? 'Changes requested' : resubmitted ? 'Back in review' : 'In review',
-      date: r.resubmittedAt || r.rejectedAt,
-      note: rejected ? (r.resubmitCount > 0 ? `${r.resubmitCount} resubmission${r.resubmitCount > 1 ? 's' : ''} so far` : 'Awaiting resubmission') : null,
-      amber: rejected,
-    },
-    { label: 'Approved', date: r.approvedAt },
-    { label: 'Posted', date: r.postedAt },
-  ];
+  const stageIdx = isDesign
+    ? (r.status === 'POSTED' ? 4 : r.assignedTo ? 3 : r.status === 'APPROVED' ? 2 : 1)
+    : (r.status === 'POSTED' ? 3 : r.status === 'APPROVED' ? 2 : 1);
+  const reviewStep = {
+    label: rejected ? 'Changes requested' : resubmitted ? 'Back in review' : 'In review',
+    date: r.resubmittedAt || r.rejectedAt,
+    note: rejected ? (r.resubmitCount > 0 ? `${r.resubmitCount} resubmission${r.resubmitCount > 1 ? 's' : ''} so far` : 'Awaiting resubmission') : null,
+    amber: rejected,
+  };
+  const steps = isDesign
+    ? [
+        { label: 'Submitted', date: r.createdAt },
+        reviewStep,
+        { label: 'Approved', date: r.approvedAt },
+        { label: 'Assigned', date: r.assignedAt, note: r.assignedTo && stageIdx === 3 ? `to ${r.assignedTo?.name}` : null },
+        { label: 'Posted', date: r.postedAt },
+      ]
+    : [
+        { label: 'Submitted', date: r.createdAt },
+        reviewStep,
+        { label: 'Approved', date: r.approvedAt },
+        { label: 'Posted', date: r.postedAt },
+      ];
+  const percent = Math.round(((stageIdx + 1) / steps.length) * 100);
 
   return (
     <Card className="p-5">
@@ -174,7 +199,7 @@ function LifecycleCard({ r, isOwner }) {
         <h3 className="font-bold text-slate-800 dark:text-white">Approval lifecycle</h3>
         <span className="text-sm font-semibold text-brand-600">{percent}% complete</span>
       </div>
-      <div className="grid grid-cols-4">
+      <div className={cn('grid', isDesign ? 'grid-cols-5' : 'grid-cols-4')}>
         {steps.map((s, i) => {
           const done = i < stageIdx;
           const current = i === stageIdx;
@@ -190,14 +215,14 @@ function LifecycleCard({ r, isOwner }) {
                 current && (s.amber ? 'bg-amber-500 text-white ring-4 ring-amber-500/20' : 'bg-brand-600 text-white ring-4 ring-brand-500/20'),
                 !done && !current && 'border-2 border-slate-200 dark:border-slate-700 text-slate-400 bg-white dark:bg-slate-900'
               )}>
-                {done || (current && i === 3) ? <Check className="h-4 w-4" /> : s.amber && current ? <MessageSquareWarning className="h-4 w-4" /> : i + 1}
+                {done || (current && i === steps.length - 1) ? <Check className="h-4 w-4" /> : s.amber && current ? <MessageSquareWarning className="h-4 w-4" /> : i + 1}
               </span>
               <p className={cn('mt-2 text-xs font-semibold',
                 s.amber && current ? 'text-amber-600' : done || current ? 'text-slate-700 dark:text-slate-200' : 'text-slate-400')}>
                 {s.label}
               </p>
               {(done || current) && s.date && <p className="mt-0.5 text-[11px] text-slate-400">{formatDate(s.date)}</p>}
-              {current && s.note && <p className="mt-0.5 text-[11px] text-amber-600">{s.note}</p>}
+              {current && s.note && <p className={cn('mt-0.5 text-[11px]', s.amber ? 'text-amber-600' : 'text-slate-400')}>{s.note}</p>}
             </div>
           );
         })}
@@ -205,8 +230,175 @@ function LifecycleCard({ r, isOwner }) {
       <div className="mt-5 h-1.5 rounded-full bg-slate-100 dark:bg-slate-800">
         <div className="h-full rounded-full bg-brand-500 transition-all" style={{ width: `${percent}%` }} />
       </div>
-      {r.status === 'APPROVED' && !isOwner && (
+      {r.status === 'APPROVED' && !isOwner && r.type !== 'DESIGN' && (
         <p className="mt-3 flex items-center gap-1.5 text-xs font-medium text-emerald-600"><CheckCircle2 className="h-4 w-4" /> Awaiting posting by {r.createdBy?.name || 'the submitter'}</p>
+      )}
+      {r.type === 'DESIGN' && r.status === 'APPROVED' && !r.assignedTo && (
+        <p className="mt-3 flex items-center gap-1.5 text-xs font-medium text-violet-600 dark:text-violet-400"><UserCheck className="h-4 w-4" /> Ready to be assigned to a {r.platform} handler</p>
+      )}
+      {r.type === 'DESIGN' && r.assignedTo && !r.linkedPost && r.status !== 'POSTED' && (
+        <p className="mt-3 flex items-center gap-1.5 text-xs font-medium text-violet-600 dark:text-violet-400"><UserCheck className="h-4 w-4" /> Waiting for {r.assignedTo?.name} to raise the post request</p>
+      )}
+    </Card>
+  );
+}
+
+// ---- Design pipeline: hand the approved design to a platform handler ----
+function HandlerRow({ h, matched = false, selected, onSelect }) {
+  return (
+    <button
+      type="button" onClick={onSelect}
+      className={cn(
+        'flex w-full items-center gap-3 rounded-xl border-2 p-3 text-left transition',
+        selected ? 'border-brand-500 bg-brand-50/60 dark:bg-brand-500/10' : 'border-slate-200 hover:border-brand-300 dark:border-slate-700'
+      )}
+    >
+      <Avatar src={h.avatar} name={h.name} size="sm" />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-semibold text-slate-800 dark:text-white">{h.name}</span>
+        <span className="block truncate text-xs text-slate-400">{h.email}</span>
+      </span>
+      {matched && (
+        <span className="shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400">
+          Declared handler
+        </span>
+      )}
+    </button>
+  );
+}
+
+function AssignmentCard({ r, user, privileged, onChanged, navigate }) {
+  const orgId = r.organization?._id || r.organization;
+  const isAssignee = r.assignedTo && String(r.assignedTo._id || r.assignedTo) === String(user?._id);
+  const forwardedTargets = r.forwardedTargets || [];
+  const hasUser = (arr) => (arr || []).some((h) => String(h?._id || h) === String(user?._id));
+  const myForwardTargets = forwardedTargets.filter((t) => hasUser(t.handlers));
+  const isForwardedHandler = myForwardTargets.length > 0;
+  const canAssign = privileged && r.status === 'APPROVED' && !r.linkedPost;
+  const canCreatePost = (isAssignee || isForwardedHandler) && !r.linkedPost && r.status === 'APPROVED';
+  const [picking, setPicking] = useState(false);
+  const [selected, setSelected] = useState('');
+  const choosing = canAssign && (picking || !r.assignedTo);
+
+  const { data: handlerData, isLoading } = useQuery({
+    queryKey: ['handlers', String(orgId), r.platform],
+    queryFn: () => approvalApi.handlers(orgId, r.platform),
+    enabled: choosing,
+  });
+  const handlers = handlerData?.handlers || [];
+  const fallback = handlerData?.fallback || [];
+
+  const assignMut = useMutation({
+    mutationFn: (userId) => approvalApi.assign(r._id, userId),
+    onSuccess: () => { toast.success('Design assigned'); setPicking(false); setSelected(''); onChanged(); },
+    onError: (e) => toast.error(e.response?.data?.message || 'Failed to assign'),
+  });
+
+  if (!r.assignedTo && !canAssign && forwardedTargets.length === 0) return null;
+
+  return (
+    <Card className="p-5">
+      <div className="mb-4 flex items-center justify-between">
+        <h3 className="flex items-center gap-2 font-bold text-slate-800 dark:text-white">
+          <UserCheck className="h-4 w-4 text-violet-500" /> Assignment & forwarding
+        </h3>
+        {r.assignedTo && canAssign && !picking && (
+          <button onClick={() => setPicking(true)} className="text-sm font-medium text-brand-700 hover:text-brand-800 dark:text-brand-400 dark:hover:text-brand-300">
+            Reassign
+          </button>
+        )}
+      </div>
+
+      {r.assignedTo && !choosing && (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <Avatar src={r.assignedTo?.avatar} name={r.assignedTo?.name} size="md" />
+            <div>
+              <p className="text-sm font-semibold text-slate-800 dark:text-white">{r.assignedTo?.name}</p>
+              <p className="text-xs text-slate-400">
+                {r.platform} handler · assigned {formatDate(r.assignedAt)}{r.assignedBy?.name ? ` by ${r.assignedBy.name}` : ''}
+              </p>
+            </div>
+          </div>
+          {canCreatePost && (
+            <Button size="sm" onClick={() => navigate(`/approvals?compose=post&design=${r._id}`)}>
+              <FilePlus2 className="h-4 w-4" /> Create post request
+            </Button>
+          )}
+          {r.linkedPost && (
+            <Button size="sm" variant="outline" onClick={() => navigate(`/approvals/${r.linkedPost._id || r.linkedPost}`)}>
+              <Send className="h-4 w-4" /> View post request
+              {r.linkedPost.status && <Badge status={r.linkedPost.status}>{r.linkedPost.status}</Badge>}
+            </Button>
+          )}
+        </div>
+      )}
+
+      {forwardedTargets.length > 0 && !choosing && (
+        <div className={cn('space-y-2', r.assignedTo && 'mt-4 border-t border-slate-100 pt-4 dark:border-slate-800')}>
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Forwarded digital targets</p>
+          {forwardedTargets.map((t, idx) => {
+            const mine = hasUser(t.handlers);
+            return (
+              <div key={`${t.organization?._id || t.organization}-${t.platform}-${idx}`} className={cn('rounded-xl border p-3', mine ? 'border-brand-300 bg-brand-50/50 dark:border-brand-500/40 dark:bg-brand-500/10' : 'border-slate-100 dark:border-slate-800')}>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">{t.organization?.name || 'Organization'} · {t.platform}</p>
+                  {mine && <span className="rounded-full bg-brand-100 px-2 py-0.5 text-[11px] font-semibold text-brand-700 dark:bg-brand-500/20 dark:text-brand-300">Assigned to you</span>}
+                </div>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {(t.handlers || []).map((h) => (
+                    <span key={h._id || h} className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                      <Avatar src={h.avatar} name={h.name} size="sm" className="h-4 w-4 text-[9px]" />
+                      {h.name || 'Handler'}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {choosing && (
+        <div>
+          <p className="mb-3 text-sm text-slate-500 dark:text-slate-400">
+            Pick who publishes on <span className="font-semibold">{r.platform}</span> for {r.organization?.name || 'this organization'}.
+          </p>
+          {isLoading ? (
+            <Skeleton className="h-24" />
+          ) : (
+            <>
+              {handlers.length === 0 && fallback.length === 0 && (
+                <p className="rounded-xl border border-dashed border-slate-200 p-4 text-sm text-slate-400 dark:border-slate-700">
+                  No team members found for this organization yet — ask them to add the pages they handle in My Profile.
+                </p>
+              )}
+              {handlers.length > 0 && (
+                <div className="space-y-2">
+                  {handlers.map((h) => <HandlerRow key={h._id} h={h} matched selected={selected === h._id} onSelect={() => setSelected(h._id)} />)}
+                </div>
+              )}
+              {fallback.length > 0 && (
+                <>
+                  <p className={cn('mb-2 text-[11px] font-bold uppercase tracking-wide text-slate-400', handlers.length > 0 && 'mt-4')}>
+                    {handlers.length > 0 ? 'Other team members' : `No declared ${r.platform} handlers — other team members`}
+                  </p>
+                  <div className="space-y-2">
+                    {fallback.map((h) => <HandlerRow key={h._id} h={h} selected={selected === h._id} onSelect={() => setSelected(h._id)} />)}
+                  </div>
+                </>
+              )}
+              {(handlers.length > 0 || fallback.length > 0) && (
+                <div className="mt-4 flex justify-end gap-2">
+                  {r.assignedTo && <Button variant="outline" size="sm" onClick={() => { setPicking(false); setSelected(''); }}>Cancel</Button>}
+                  <Button size="sm" disabled={!selected} loading={assignMut.isPending} onClick={() => assignMut.mutate(selected)}>
+                    <UserCheck className="h-4 w-4" /> Assign design
+                  </Button>
+                </div>
+              )}
+            </>
+          )}
+        </div>
       )}
     </Card>
   );
@@ -220,13 +412,29 @@ const Def = ({ label, value }) => (
   </div>
 );
 
-function PostDetailsCard({ r }) {
+function PostDetailsCard({ r, navigate }) {
   return (
     <Card className="p-5">
-      <h3 className="mb-4 font-bold text-slate-800 dark:text-white">Post details</h3>
+      <h3 className="mb-4 font-bold text-slate-800 dark:text-white">{r.type === 'DESIGN' ? 'Design details' : 'Post details'}</h3>
       <div className="grid gap-4 sm:grid-cols-2">
         <Def label="Organization" value={r.organization?.name || '—'} />
         <Def label="Platform" value={<Badge>{r.platform}</Badge>} />
+        {r.sourceDesign && (
+          <Def label="Created from design" value={
+            <button onClick={() => navigate(`/approvals/${r.sourceDesign._id || r.sourceDesign}`)}
+              className="inline-flex items-center gap-1.5 font-medium text-violet-600 hover:text-violet-700 dark:text-violet-400 dark:hover:text-violet-300">
+              <Palette className="h-3.5 w-3.5" /> {r.sourceDesign?.title || 'View design'}
+            </button>
+          } />
+        )}
+        {r.type === 'DESIGN' && r.linkedPost && (
+          <Def label="Post request" value={
+            <button onClick={() => navigate(`/approvals/${r.linkedPost._id || r.linkedPost}`)}
+              className="inline-flex items-center gap-1.5 font-medium text-violet-600 hover:text-violet-700 dark:text-violet-400 dark:hover:text-violet-300">
+              <Send className="h-3.5 w-3.5" /> {r.linkedPost?.title || 'View post'}
+            </button>
+          } />
+        )}
         <Def label="Aspect ratio" value={r.aspectRatio || '—'} />
         <Def label="Submitted by" value={
           <span className="flex items-center gap-2">

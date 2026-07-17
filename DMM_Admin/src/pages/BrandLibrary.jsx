@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { Images, Plus, Trash2, ExternalLink, Download, Film, FileText, LinkIcon, Play, Globe } from 'lucide-react';
 import { brandApi, linkApi } from '../api/endpoints.js';
+import { useAuthStore } from '../store/authStore.js';
 import { youtubeThumb, cn } from '../lib/utils.js';
 import PageHeader from '../components/layout/PageHeader.jsx';
 import OrgPicker from '../components/OrgPicker.jsx';
@@ -24,6 +25,9 @@ export default function BrandLibrary() {
 
 function Inner({ orgId }) {
   const qc = useQueryClient();
+  const { user } = useAuthStore();
+  // Only the super admin may remove items; everyone else can upload/download only.
+  const canManage = user?.role === 'ADMIN' && !!user?.isSuperAdmin;
   const [category, setCategory] = useState('All');
   const key = ['brand', orgId, category];
   const { data, isLoading } = useQuery({ queryKey: key, queryFn: () => brandApi.list({ category }) });
@@ -53,7 +57,7 @@ function Inner({ orgId }) {
           action={<Button size="sm" onClick={() => setShowAdd(true)}><Plus className="h-4 w-4" /> Add item</Button>} />
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {items.map((it) => <BrandCard key={it._id} item={it} onDelete={() => window.confirm(`Delete "${it.title}"?`) && removeMut.mutate(it._id)} />)}
+          {items.map((it) => <BrandCard key={it._id} item={it} canManage={canManage} onDelete={() => window.confirm(`Delete "${it.title}"?`) && removeMut.mutate(it._id)} />)}
         </div>
       )}
 
@@ -102,7 +106,7 @@ function LinkThumb({ url }) {
   return <Placeholder type="Link" label={isLoading ? 'Loading preview…' : (data?.siteName || 'External link')} />;
 }
 
-function BrandCard({ item, onDelete }) {
+function BrandCard({ item, canManage, onDelete }) {
   const url = fileUrl(item.url);
   const ytThumb = item.kind === 'link' ? youtubeThumb(item.url) : null;
   const isLink = item.kind === 'link';
@@ -136,7 +140,9 @@ function BrandCard({ item, onDelete }) {
           <a href={url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300">
             {isLink ? <><ExternalLink className="h-3.5 w-3.5" /> Open link</> : <><Download className="h-3.5 w-3.5" /> View / download</>}
           </a>
-          <button onClick={onDelete} className="ml-auto rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-500/10"><Trash2 className="h-4 w-4" /></button>
+          {canManage && (
+            <button onClick={onDelete} className="ml-auto rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-500/10"><Trash2 className="h-4 w-4" /></button>
+          )}
         </div>
       </div>
     </Card>

@@ -18,13 +18,15 @@ export const PLATFORM_FIELDS = {
     Discovery: ['searchAppearances'],
   },
   Instagram: {
-    Overview: ['followers', 'views', 'reach', 'interactions'],
+    Audience: ['followers'],
+    Discovery: ['impressions', 'reach', 'views', 'pageViews'],
+    Engagement: ['interactions', 'linkClicks'],
   },
   YouTube: {
     Overview: ['subscribers', 'views', 'videoCount', 'engagementRate', 'comments'],
   },
   Facebook: {
-    Overview: ['followers', 'newFollowers', 'reach', 'views', 'interactions', 'visits', 'linkClicks'],
+    Overview: ['followers', 'newFollowers', 'interactions', 'visits'],
   },
 };
 
@@ -104,11 +106,10 @@ export const FIELD_HELP = {
 // youtubeService). Everything else arrives via Excel import or manual entry.
 export const SYNC_INFO = {
   LinkedIn: { provider: null, fields: [] }, // no API sync — Excel exports / manual only
-  Instagram: { provider: 'Meta', fields: ['followers', 'reach', 'views', 'interactions'] },
-  // Only the two node fields Meta still exposes reliably. newFollowers/visits are
-  // attempted via page insights but Meta retired those (they return empty), and
-  // reach/views don't exist for Facebook Pages at all — Instagram-only metrics.
-  Facebook: { provider: 'Meta', fields: ['followers', 'interactions'] },
+  Instagram: { provider: 'Meta', fields: ['followers', 'impressions', 'reach', 'views', 'pageViews', 'linkClicks', 'interactions'] },
+  // Meta's Page API is inconsistent by account; we attempt page insights first
+  // and fall back to recent post insights when available.
+  Facebook: { provider: 'Meta', fields: ['followers', 'interactions', 'newFollowers', 'visits'] },
   YouTube: { provider: 'YouTube', fields: ['subscribers', 'views', 'videoCount', 'comments', 'engagementRate'] },
 };
 
@@ -404,6 +405,79 @@ export const getPlatformHistory = asyncHandler(async (req, res) => {
   if (!PLATFORMS.includes(platform)) { res.status(400); throw new Error('Invalid platform'); }
   const history = await Analytics.find({ organization: orgId, platform }).sort({ date: -1 }).limit(30).lean();
   res.json({ success: true, platform, history: history.reverse() });
+});
+
+// Flow/activity metrics (per-day values) that make sense on a heatmap. Excludes
+// running totals (followers, subscribers…) and percentages (engagement rate…),
+// which don't represent "activity on that day".
+const HEATMAP_FLOW_FIELDS = new Set([
+  'newFollowers', 'impressions', 'uniqueImpressions', 'reach', 'searchAppearances',
+  'views', 'watchHours', 'postsPublished', 'clicks', 'reactions', 'comments',
+  'reposts', 'interactions', 'pageViews', 'uniqueVisitors', 'visits', 'linkClicks',
+  'desktopPageViews', 'mobilePageViews', 'customButtonClicks', 'leads', 'leadFormViews',
+]);
+const HEATMAP_DEFAULT_METRIC = {
+  LinkedIn: 'impressions',
+  Instagram: 'interactions',
+  YouTube: 'views',
+  Facebook: 'interactions',
+};
+// The flow metrics available for a platform, in PLATFORM_FIELDS order.
+const heatmapMetricsFor = (platform) =>
+  flatFields(platform).filter((f) => HEATMAP_FLOW_FIELDS.has(f)).map((f) => ({ key: f, label: FIELD_LABELS[f] || f }));
+
+// @route GET /api/analytics/:platform/heatmap?organizationId=&metric=&days=365
+// Daily values of one activity metric across the last ~year, for a GitHub-style
+// contribution heatmap. Days with no data come back as 0.
+export const getPlatformHeatmap = asyncHandler(async (req, res) => {
+  const orgId = resolveViewOrgId(req); // any user may view any org
+  const { platform } = req.params;
+  if (!PLATFORMS.includes(platform)) { res.status(400); throw new Error('Invalid platform'); }
+
+  const available = heatmapMetricsFor(platform);
+  if (!available.length) { res.status(400); throw new Error('No heatmap metrics for this platform'); }
+  // Chosen metric: a valid query param, else the platform default, else the first.
+  const requested = String(req.query.metric || '');
+  const metric = available.some((m) => m.key === requested)
+    ? requested
+    : (available.some((m) => m.key === HEATMAP_DEFAULT_METRIC[platform]) ? HEATMAP_DEFAULT_METRIC[platform] : available[0].key);
+
+  const days = Math.min(Math.max(Number(req.query.days) || 365, 30), 366);
+  const dayMs = 86400000;
+  const now = new Date();
+  const todayMs = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()); // midnight UTC today
+  const startMs = todayMs - (days - 1) * dayMs;
+  const start = new Date(startMs);
+
+  const rows = await Analytics.find({ organization: orgId, platform, date: { $gte: start } })
+    .select(`date ${metric}`).lean();
+
+  // Sum the metric per calendar day (UTC).
+  const byDay = {};
+  for (const r of rows) {
+    const key = new Date(r.date).toISOString().slice(0, 10);
+    byDay[key] = (byDay[key] || 0) + (Number(r[metric]) || 0);
+  }
+
+  // One cell per day across the whole window, 0 where there is no snapshot.
+  const cells = [];
+  let total = 0, max = 0, activeDays = 0, bestDay = null;
+  for (let i = 0; i < days; i++) {
+    const key = new Date(startMs + i * dayMs).toISOString().slice(0, 10);
+    const value = byDay[key] || 0;
+    cells.push({ date: key, value });
+    total += value;
+    if (value > 0) { activeDays++; if (value > max) { max = value; bestDay = { date: key, value }; } }
+  }
+
+  res.json({
+    success: true,
+    platform, metric, label: FIELD_LABELS[metric] || metric,
+    days, from: cells[0]?.date, to: new Date(todayMs).toISOString().slice(0, 10),
+    cells,
+    stats: { total, max, activeDays, average: activeDays ? Math.round(total / activeDays) : 0, bestDay },
+    metrics: available,
+  });
 });
 
 // @route GET /api/analytics/compare?platform=&metric=  (ADMIN) — compare orgs on one metric

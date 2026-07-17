@@ -3,7 +3,7 @@ import { assetApi } from '../api/endpoints.js';
 
 const ASSET_CATEGORIES = [
   'Logos', 'Favicons', 'PNG Files', 'Backgrounds',
-  'Icons', 'Illustrations', 'Brand Assets',
+  'Icons', 'Illustrations', 'Brand Assets', 'Center of Excellence',
 ];
 
 export default function Assets() {

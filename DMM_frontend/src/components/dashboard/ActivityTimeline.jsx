@@ -1,5 +1,5 @@
 import {
-  Upload, CheckCircle2, XCircle, Send, RefreshCw, FileImage, Activity, MessageSquare, UserCog, BarChart3,
+  Upload, CheckCircle2, XCircle, Send, RefreshCw, FileImage, Activity, MessageSquare, UserCog, BarChart3, BriefcaseBusiness,
 } from 'lucide-react';
 import { Card, Avatar, EmptyState } from '../ui/primitives.jsx';
 import { timeAgo } from '../../lib/utils.js';
@@ -13,6 +13,7 @@ const META = {
   APPROVAL_APPROVED: { icon: CheckCircle2, verb: 'approved content', tone: 'good' },
   APPROVAL_REJECTED: { icon: MessageSquare, verb: 'requested changes', tone: 'bad' },
   APPROVAL_RESUBMITTED: { icon: RefreshCw, verb: 'resubmitted content', tone: 'neutral' },
+  WORK_ASSIGNED: { icon: BriefcaseBusiness, verb: 'assigned work', tone: 'neutral' },
   POST_COMPLETION: { icon: CheckCircle2, verb: 'marked content as posted', tone: 'good' },
   USER_CREATED: { icon: UserCog, verb: 'added a team member', tone: 'neutral' },
   USER_UPDATED: { icon: UserCog, verb: 'updated a team member', tone: 'neutral' },

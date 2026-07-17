@@ -1,13 +1,15 @@
 import { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  Inbox, Search, Images as ImagesIcon, Clock, Play, RefreshCw, CheckCircle2, Send, X,
+  BriefcaseBusiness, Inbox, Search, Images as ImagesIcon, Clock, Play, RefreshCw, CheckCircle2, Send, X,
+  Palette, UserCheck,
 } from 'lucide-react';
 import { approvalApi, organizationApi } from '../api/endpoints.js';
 import PageHeader from '../components/layout/PageHeader.jsx';
 import { Button } from '../components/ui/Button.jsx';
 import { Card, Input, Select, Avatar, Badge, Skeleton, EmptyState } from '../components/ui/primitives.jsx';
+import WorkAssignmentModal from '../components/approvals/WorkAssignmentModal.jsx';
 import { formatDate, cn, isVideo } from '../lib/utils.js';
 
 export const STATUS_STYLES = {
@@ -39,6 +41,14 @@ export function FeedbackCategoryTag({ category }) {
 }
 
 const PLATFORMS = ['All', 'LinkedIn', 'Instagram', 'YouTube', 'Facebook'];
+
+// The two approval pipelines. POST = ready-to-publish content. DESIGN =
+// creative work that, once approved, is assigned to a platform handler who
+// then raises the linked post request.
+const TYPE_TABS = [
+  { key: 'POST', label: 'Post approvals', icon: Send },
+  { key: 'DESIGN', label: 'Design approvals', icon: Palette },
+];
 
 const TABS = [
   { value: 'All', label: 'All' },
@@ -95,11 +105,14 @@ function Thumb({ media }) {
 
 export default function Approvals() {
   const navigate = useNavigate();
+  const qc = useQueryClient();
   const [searchParams] = useSearchParams();
   const urlStatus = searchParams.get('status');
+  const [showAssign, setShowAssign] = useState(false);
   const [filters, setFilters] = useState({
     search: '',
     status: TABS.some((t) => t.value === urlStatus) ? urlStatus : 'All',
+    type: searchParams.get('type') === 'DESIGN' ? 'DESIGN' : 'POST',
     platform: 'All',
     organizationId: '',
     from: '',
@@ -128,6 +141,7 @@ export default function Approvals() {
   });
   const requests = data?.requests || [];
   const counts = data?.counts || {};
+  const typeCounts = data?.typeCounts || {};
   const total = data?.total || 0;
   const pages = data?.pages || 1;
   const firstRow = total === 0 ? 0 : (page - 1) * limit + 1;
@@ -135,7 +149,32 @@ export default function Approvals() {
 
   return (
     <div>
-      <PageHeader title="Approvals" subtitle="As the head of all organizations, review, approve or request changes to content from any organization." />
+      <PageHeader
+        title="Approvals"
+        subtitle="As the head of all organizations, review approvals or assign work to designers and social handlers."
+        actions={<Button onClick={() => setShowAssign(true)}><BriefcaseBusiness className="h-4 w-4" /> Assign Work</Button>}
+      />
+
+      {/* Pipeline switch: post approvals vs design approvals */}
+      <div className="mb-5 inline-flex rounded-2xl border border-slate-200 bg-white p-1.5 shadow-soft dark:border-slate-800 dark:bg-slate-900">
+        {TYPE_TABS.map((t) => (
+          <button
+            key={t.key} type="button"
+            onClick={() => setFilter({ type: t.key, status: 'All' })}
+            className={cn(
+              'flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition',
+              filters.type === t.key
+                ? 'bg-gradient-to-b from-brand-500 to-brand-600 text-white shadow-soft'
+                : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+            )}
+          >
+            <t.icon className="h-4 w-4" /> {t.label}
+            <span className={cn('rounded-full px-2 py-0.5 text-xs font-bold', filters.type === t.key ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500 dark:bg-slate-800')}>
+              {typeCounts[t.key] ?? 0}
+            </span>
+          </button>
+        ))}
+      </div>
 
       {/* Stat tiles — click to jump to that status tab */}
       <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
@@ -193,7 +232,12 @@ export default function Approvals() {
       </div>
 
       {!isLoading && requests.length === 0 ? (
-        <EmptyState icon={Inbox} title="Nothing to show" description={EMPTY_COPY[filters.status] || EMPTY_COPY.All} />
+        <EmptyState
+          icon={Inbox}
+          title="Nothing to show"
+          description={EMPTY_COPY[filters.status] || EMPTY_COPY.All}
+          action={<Button onClick={() => setShowAssign(true)}><BriefcaseBusiness className="h-4 w-4" /> Assign Work</Button>}
+        />
       ) : (
         <Card className="overflow-hidden">
           <div className="overflow-x-auto">
@@ -227,6 +271,11 @@ export default function Approvals() {
                                 <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: r.organization?.color || '#7c3aed' }} />
                                 <span className="max-w-[220px] truncate">{r.organization?.name || '—'}</span>
                               </p>
+                              {r.type === 'DESIGN' && r.assignedTo && (
+                                <p className="mt-0.5 flex items-center gap-1 text-[11px] font-medium text-violet-500">
+                                  <UserCheck className="h-3 w-3" /> {r.assignedTo?.name}
+                                </p>
+                              )}
                             </div>
                           </div>
                         </td>
@@ -263,6 +312,13 @@ export default function Approvals() {
             </label>
           </div>
         </Card>
+      )}
+
+      {showAssign && (
+        <WorkAssignmentModal
+          onClose={() => setShowAssign(false)}
+          onSaved={() => setShowAssign(false)}
+        />
       )}
     </div>
   );

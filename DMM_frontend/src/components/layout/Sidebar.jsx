@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard, FileImage, Images, CheckSquare, BarChart3, CalendarDays,
-  FileText, Bell, Settings, X, TrendingUp, Palette, Share2, ShoppingBag, Camera, ClipboardList, Sparkles, Flag, CircleUser,
+  FileText, Bell, Settings, X, TrendingUp, Palette, Share2, ShoppingBag, Camera, ClipboardList, Sparkles, Flag, CircleUser, BriefcaseBusiness,
 } from 'lucide-react';
 import { cn, roleLabel } from '../../lib/utils.js';
 import { useAuthStore } from '../../store/authStore.js';
@@ -30,6 +30,7 @@ const NAV_SECTIONS = [
     title: 'Workflow',
     items: [
       { to: '/approvals', label: 'Approvals', icon: CheckSquare },
+      { to: '/my-assigned-work', label: 'My Assigned Work', icon: BriefcaseBusiness },
       { to: '/planner', label: 'Post Planner', icon: ClipboardList },
       { to: '/calendar', label: 'Calendar', icon: CalendarDays },
     ],
@@ -60,11 +61,6 @@ const NAV_SECTIONS = [
   },
 ];
 
-// The "t@g" wordmark with the @ in brand orange.
-const Wordmark = () => (
-  <span className="lowercase tracking-tight">t<span className="text-brand-500">@</span>g</span>
-);
-
 export default function Sidebar({ open, onClose }) {
   const { user } = useAuthStore();
   const org = user?.organization;
@@ -81,23 +77,31 @@ export default function Sidebar({ open, onClose }) {
           open ? 'translate-x-0' : '-translate-x-full'
         )}
       >
-        <div className="flex h-16 items-center justify-between px-5">
-          <div className="flex min-w-0 items-center gap-2.5">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white shadow-sm">
-              {org?.logo
-                ? <img src={org.logo} alt={org.name} className="h-full w-full object-cover" />
-                : <img src="/logo.png" alt="t@g" className="h-full w-full object-contain p-1" />}
-            </div>
-            <div className="min-w-0">
-              <p className="truncate text-base font-extrabold leading-tight text-white">
-                {org?.name || <Wordmark />}
-              </p>
-              <p className="text-[11px] text-slate-400">Marketing Suite</p>
-            </div>
-          </div>
-          <button onClick={onClose} aria-label="Close menu" className="rounded-lg p-1.5 text-slate-300 transition-colors hover:bg-white/10 lg:hidden">
+        {/* Brand block — the same transparent lockup as the login page, with room to breathe */}
+        <div className="relative border-b border-white/5 px-5 pb-4 pt-5">
+          <button onClick={onClose} aria-label="Close menu" className="absolute right-3 top-3 rounded-lg p-1.5 text-slate-300 transition-colors hover:bg-white/10 lg:hidden">
             <X className="h-5 w-5" />
           </button>
+          {org?.logo ? (
+            // The college's own logo keeps a white chip (arbitrary images need it on navy)
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white shadow-sm">
+                <img src={org.logo} alt={org.name} className="h-full w-full object-cover" />
+              </div>
+              <div className="min-w-0">
+                <p className="truncate text-base font-extrabold leading-tight text-white">{org.name}</p>
+                <p className="mt-0.5 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Digital Pulse of NGI</p>
+              </div>
+            </div>
+          ) : (
+            <div className="min-w-0">
+              <img src="/logo-light.png" alt="t@g" className="h-12 w-auto" />
+              {org?.name && <p className="mt-2.5 truncate text-sm font-bold leading-tight text-white">{org.name}</p>}
+              <p className={org?.name ? 'mt-0.5 truncate text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400' : 'mt-2 truncate text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400'}>
+                Digital Pulse of NGI
+              </p>
+            </div>
+          )}
         </div>
 
         <nav aria-label="Main navigation" className="flex-1 overflow-y-auto px-4 py-4">

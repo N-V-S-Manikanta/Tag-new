@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import Sidebar from './Sidebar.jsx';
 import Topbar from './Topbar.jsx';
-import TagoWidget from '../TagoWidget.jsx';
 
 export default function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -15,8 +14,6 @@ export default function AppLayout() {
           <Outlet />
         </main>
       </div>
-      {/* Tago — floating assistant, available on every page. */}
-      <TagoWidget />
     </div>
   );
 }

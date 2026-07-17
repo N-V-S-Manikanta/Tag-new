@@ -8,9 +8,31 @@ import { fileURLToPath } from 'url';
 import crypto from 'crypto';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const UPLOAD_ROOT = path.resolve(__dirname, '../../uploads');
+
+// Where locally-stored files live on disk. Defaults to the app's own `uploads`
+// folder (fine for local dev). In production point LOCAL_STORAGE_ROOT at the
+// mounted storage volume, e.g. the TrueNAS mount: LOCAL_STORAGE_ROOT=/mnt/tag-storage
+// Everything (templates, assets, brand assets, approvals, avatars) is written
+// under and served from this single root, so one env var moves all of it.
+const UPLOAD_ROOT = process.env.LOCAL_STORAGE_ROOT
+  ? path.resolve(process.env.LOCAL_STORAGE_ROOT)
+  : path.resolve(__dirname, '../../uploads');
 
 const driver = (process.env.STORAGE_DRIVER || 'local').toLowerCase();
+
+// Boot-time sanity check: if a storage root is configured but missing, warn
+// loudly. This catches the classic footgun of the TrueNAS mount not being
+// mounted yet — otherwise files would silently land on the local disk under
+// the mount point and vanish once the real volume mounts.
+function ensureStorageReady() {
+  if (driver !== 'local') return { ok: true, root: null };
+  const configured = !!process.env.LOCAL_STORAGE_ROOT;
+  const exists = fs.existsSync(UPLOAD_ROOT);
+  if (configured && !exists) {
+    console.warn(`⚠️  LOCAL_STORAGE_ROOT is set to "${UPLOAD_ROOT}" but that path does not exist. Is the storage volume mounted? Uploads will fail until it is available.`);
+  }
+  return { ok: !configured || exists, root: UPLOAD_ROOT };
+}
 
 /**
  * Persist a file buffer and return { url, publicId }.
@@ -80,4 +102,4 @@ async function uploadToCloudinary(buffer, folder, originalName) {
   });
 }
 
-export { uploadBuffer, deleteFile, driver, UPLOAD_ROOT };
+export { uploadBuffer, deleteFile, driver, UPLOAD_ROOT, ensureStorageReady };

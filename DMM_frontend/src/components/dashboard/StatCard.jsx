@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { cn, formatNumber } from '../../lib/utils.js';
+import { cn } from '../../lib/utils.js';
+import CountUp from './CountUp.jsx';
 
 // Pass `to` to make the card clickable — it navigates to that route.
 export default function StatCard({ label, value, icon: Icon, tone = 'brand', delay = 0, suffix, to }) {
@@ -22,8 +23,8 @@ export default function StatCard({ label, value, icon: Icon, tone = 'brand', del
       <div className="flex items-start justify-between">
         <div>
           <p className="text-sm font-medium text-slate-400">{label}</p>
-          <p className="mt-2 text-3xl font-extrabold tracking-tight text-slate-800 dark:text-white">
-            {typeof value === 'number' ? formatNumber(value) : value}{suffix}
+          <p className="mt-2 text-3xl font-extrabold tabular-nums tracking-tight text-slate-800 dark:text-white">
+            {typeof value === 'number' ? <CountUp value={value} /> : value}{suffix}
           </p>
         </div>
         {Icon && (

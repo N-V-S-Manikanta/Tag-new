@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Building2, Users, Activity, BarChart3, CalendarDays, Settings, X, ShieldCheck, CheckSquare, Images, Share2, ShoppingBag, Target, Globe, Camera, ClipboardList, Sparkles, Flag } from 'lucide-react';
+import { LayoutDashboard, Building2, Users, Activity, BarChart3, CalendarDays, Settings, X, ShieldCheck, CheckSquare, Images, Share2, ShoppingBag, Target, Globe, Camera, ClipboardList, Sparkles, Flag, HardHat, LayoutTemplate, Package } from 'lucide-react';
 import { cn } from '../../lib/utils.js';
 
 // Navigation grouped by admin duty: running the platform, overseeing content,
@@ -23,6 +23,8 @@ const NAV_SECTIONS = [
   {
     title: 'Content',
     items: [
+      { to: '/templates', label: 'Templates', icon: LayoutTemplate },
+      { to: '/assets', label: 'Assets', icon: Package },
       { to: '/brand-library', label: 'Brand Library', icon: Images },
       { to: '/events', label: 'Events', icon: Camera },
       { to: '/signage', label: 'Signage', icon: Flag },
@@ -46,6 +48,7 @@ const NAV_SECTIONS = [
   {
     title: 'Management',
     items: [
+      { to: '/branding-register', label: 'Branding Register', icon: HardHat },
       { to: '/social-accounts', label: 'Social Handlers', icon: Share2 },
       { to: '/websites', label: 'Websites', icon: Globe },
       { to: '/purchases', label: 'Premium Packs', icon: ShoppingBag },
@@ -69,14 +72,11 @@ export default function Sidebar({ open, onClose }) {
         'fixed inset-y-0 left-0 z-40 flex w-72 flex-col border-r border-white/5 bg-gradient-to-b from-[#0b2350] to-[#08152e] transition-transform lg:translate-x-0',
         open ? 'translate-x-0' : '-translate-x-full'
       )}>
-        <div className="flex h-16 items-center justify-between px-5">
-          <div className="flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-xl bg-white shadow-sm">
-              <img src="/logo.png" alt="t@g" className="h-full w-full object-contain p-1" />
-            </div>
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-300">Admin Console</p>
-          </div>
-          <button onClick={onClose} aria-label="Close menu" className="rounded-lg p-1.5 text-slate-300 transition-colors hover:bg-white/10 lg:hidden"><X className="h-5 w-5" /></button>
+        {/* Brand block — the same transparent lockup as the login page, with room to breathe */}
+        <div className="relative border-b border-white/5 px-5 pb-4 pt-5">
+          <button onClick={onClose} aria-label="Close menu" className="absolute right-3 top-3 rounded-lg p-1.5 text-slate-300 transition-colors hover:bg-white/10 lg:hidden"><X className="h-5 w-5" /></button>
+          <img src="/logo-light.png" alt="t@g" className="h-12 w-auto" />
+          <p className="mt-2 truncate text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Digital Pulse of NGI — Admin</p>
         </div>
 
         <nav aria-label="Main navigation" className="flex-1 overflow-y-auto px-4 py-4">

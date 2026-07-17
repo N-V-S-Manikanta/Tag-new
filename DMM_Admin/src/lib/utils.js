@@ -8,6 +8,14 @@ export const formatDate = (d) => (d ? format(new Date(d), 'dd MMM yyyy') : '-');
 export const formatDateTime = (d) => (d ? format(new Date(d), 'dd MMM yyyy, HH:mm') : '-');
 export const timeAgo = (d) => (d ? formatDistanceToNow(new Date(d), { addSuffix: true }) : '-');
 
+export const formatBytes = (bytes) => {
+  if (!bytes) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
+};
+
 // Show the full count with thousands separators (e.g. 12,400) — no K/M shorthand.
 export const formatNumber = (n) => {
   if (n == null || n === '') return '0';
@@ -55,7 +63,11 @@ export const ROLE_STYLES = {
 
 // Three tiers shown to people: Super Admin → Admin (org manager, stored as CEO)
 // → User. The internal role enum stays ADMIN/CEO/USER.
-export const roleLabel = (u) => (u?.isSuperAdmin ? 'Super Admin' : u?.role === 'USER' ? 'User' : 'Admin');
+export const roleLabel = (u) => {
+  if (u?.isSuperAdmin) return 'Super Admin';
+  if (u?.role === 'USER') return u?.userType === 'SOCIAL_HANDLER' ? 'Social Handler' : 'Designer';
+  return 'Admin';
+};
 export const roleStyle = (u) =>
   u?.isSuperAdmin
     ? ROLE_STYLES.ADMIN

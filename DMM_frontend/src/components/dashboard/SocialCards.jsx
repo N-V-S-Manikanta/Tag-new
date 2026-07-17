@@ -4,13 +4,13 @@ import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { analyticsApi } from '../../api/endpoints.js';
 import { useAuthStore } from '../../store/authStore.js';
-import { formatNumber } from '../../lib/utils.js';
+import CountUp from './CountUp.jsx';
 
 const CONFIG = {
   LinkedIn: { icon: Linkedin, color: '#0A66C2', metrics: [['followers', 'Followers'], ['impressions', 'Impressions'], ['engagementRate', 'Engagement', '%']] },
   Instagram: { icon: Instagram, color: '#E1306C', metrics: [['followers', 'Followers'], ['reach', 'Reach'], ['engagementRate', 'Engagement', '%']] },
   YouTube: { icon: Youtube, color: '#FF0000', metrics: [['subscribers', 'Subscribers'], ['views', 'Views'], ['watchHours', 'Watch Hrs']] },
-  Facebook: { icon: Facebook, color: '#1877F2', metrics: [['followers', 'Followers'], ['reach', 'Reach'], ['engagementRate', 'Engagement', '%']] },
+  Facebook: { icon: Facebook, color: '#1877F2', metrics: [['followers', 'Followers'], ['newFollowers', 'New'], ['interactions', 'Interactions']] },
 };
 
 export default function SocialCards({ social, orgId: orgIdProp }) {
@@ -52,8 +52,8 @@ export default function SocialCards({ social, orgId: orgIdProp }) {
               <div className="grid grid-cols-3 gap-2">
                 {cfg.metrics.map(([key, label, suffix]) => (
                   <div key={key}>
-                    <p className="text-lg font-extrabold text-slate-800 dark:text-white">
-                      {suffix === '%' ? (data[key] ?? 0).toFixed(1) : formatNumber(data[key] ?? 0)}{suffix || ''}
+                    <p className="text-lg font-extrabold tabular-nums text-slate-800 dark:text-white">
+                      <CountUp value={data[key] ?? 0} decimals={suffix === '%' ? 1 : 0} />{suffix || ''}
                     </p>
                     <p className="text-[11px] text-slate-400">{label}</p>
                   </div>

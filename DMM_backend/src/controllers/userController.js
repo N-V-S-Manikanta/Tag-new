@@ -6,13 +6,14 @@ import { uploadBuffer, deleteFile } from '../config/storage.js';
 import { logActivity } from '../utils/logActivity.js';
 import { createNotification } from '../utils/notify.js';
 import { sendEmail } from '../utils/email.js';
-import { ROLES, ACTIVITY_ACTIONS, NOTIFICATION_TYPES } from '../config/constants.js';
+import { ROLES, USER_TYPES, ACTIVITY_ACTIONS, NOTIFICATION_TYPES } from '../config/constants.js';
 
 const sanitize = (u) => ({
   _id: u._id,
   name: u.name,
   email: u.email,
   role: u.role,
+  userType: u.userType || null,
   isSuperAdmin: !!u.isSuperAdmin,
   avatar: u.avatar,
   jobTitle: u.jobTitle,
@@ -31,6 +32,11 @@ const sanitize = (u) => ({
 // ADMIN is global; CEO/USER must belong to an organization.
 const roleNeedsOrg = (role) => role === ROLES.CEO || role === ROLES.USER;
 
+const normalizeUserType = (raw) => {
+  if (!raw) return USER_TYPES.DESIGNER;
+  return Object.values(USER_TYPES).includes(raw) ? raw : USER_TYPES.DESIGNER;
+};
+
 // Accept skills as an array or a comma/newline-separated string.
 const parseSkills = (raw) => {
   if (!raw) return [];
@@ -38,7 +44,59 @@ const parseSkills = (raw) => {
   return arr.map((s) => String(s).trim()).filter(Boolean).slice(0, 30);
 };
 
+const parseHandles = async (raw) => {
+  const arr = Array.isArray(raw)
+    ? raw
+    : typeof raw === 'string' && raw.trim()
+      ? JSON.parse(raw)
+      : [];
+  if (!Array.isArray(arr)) return [];
+
+  const clean = [];
+  for (const h of arr.slice(0, 20)) {
+    if (!h?.organization) continue;
+    const org = await Organization.findById(h.organization).select('_id');
+    if (!org) continue;
+    const platforms = (Array.isArray(h.platforms) ? h.platforms : [])
+      .map((p) => String(p).trim())
+      .filter(Boolean)
+      .slice(0, 10);
+    if (platforms.length) clean.push({ organization: org._id, platforms });
+  }
+  return clean;
+};
+
 // ============================ ADMIN ============================
+
+// @route GET /api/users/handlers?organizationId=&platform=  (ADMIN/CEO)
+// Who can publish for an organization: users whose profile handles declare
+// that org (+ platform when given). `fallback` lists the org's other active
+// members so a design can still be assigned when nobody declared the platform.
+export const listHandlers = asyncHandler(async (req, res) => {
+  const { organizationId, platform } = req.query;
+  if (!organizationId) { res.status(400); throw new Error('organizationId is required'); }
+
+  const elem = platform ? { organization: organizationId, platforms: platform } : { organization: organizationId };
+  const handlers = await User.find({
+    isActive: true,
+    role: ROLES.USER,
+    userType: USER_TYPES.SOCIAL_HANDLER,
+    handles: { $elemMatch: elem },
+  })
+    .select('name email avatar role skills tools handles organization')
+    .populate('organization', 'name color')
+    .sort({ name: 1 })
+    .lean();
+
+  const matched = new Set(handlers.map((u) => String(u._id)));
+  const fallback = await User.find({ isActive: true, organization: organizationId })
+    .select('name email avatar role')
+    .sort({ name: 1 })
+    .lean()
+    .then((users) => users.filter((u) => !matched.has(String(u._id))));
+
+  res.json({ success: true, handlers, fallback });
+});
 
 // @route GET /api/users  (ADMIN) — list with search + role + organization filter
 export const getUsers = asyncHandler(async (req, res) => {
@@ -56,7 +114,20 @@ export const getUsers = asyncHandler(async (req, res) => {
 
 // @route POST /api/users  (ADMIN) — create a new user
 export const createUser = asyncHandler(async (req, res) => {
-  const { name, email, password, role, jobTitle, organization, skills, isSuperAdmin, phone, linkedinUrl } = req.body;
+  const {
+    name,
+    email,
+    password,
+    role,
+    userType,
+    jobTitle,
+    organization,
+    skills,
+    handles,
+    isSuperAdmin,
+    phone,
+    linkedinUrl,
+  } = req.body;
   if (!name || !email || !password) {
     res.status(400);
     throw new Error('Name, email and password are required');
@@ -70,6 +141,7 @@ export const createUser = asyncHandler(async (req, res) => {
   // it here is safe.
   const wantSuper = isSuperAdmin === true || isSuperAdmin === 'true';
   const finalRole = wantSuper ? ROLES.ADMIN : (role || ROLES.USER);
+  const finalUserType = finalRole === ROLES.USER ? normalizeUserType(userType) : undefined;
   if (!Object.values(ROLES).includes(finalRole)) {
     res.status(400);
     throw new Error('Invalid role');
@@ -87,7 +159,20 @@ export const createUser = asyncHandler(async (req, res) => {
     res.status(400);
     throw new Error('A user with this email already exists');
   }
-  const user = await User.create({ name, email, password, role: finalRole, isSuperAdmin: wantSuper, jobTitle: jobTitle || '', phone: phone || '', linkedinUrl: linkedinUrl || '', skills: parseSkills(skills), organization: orgId });
+  const user = await User.create({
+    name,
+    email,
+    password,
+    role: finalRole,
+    userType: finalUserType,
+    isSuperAdmin: wantSuper,
+    jobTitle: jobTitle || '',
+    phone: phone || '',
+    linkedinUrl: linkedinUrl || '',
+    skills: parseSkills(skills),
+    handles: await parseHandles(handles),
+    organization: orgId,
+  });
 
   logActivity({ user: req.user._id, organization: orgId, action: ACTIVITY_ACTIONS.USER_CREATED, description: `Created user "${name}" (${user.role})`, entityType: 'User', entityId: user._id });
 
@@ -117,7 +202,7 @@ export const updateUser = asyncHandler(async (req, res) => {
   const user = await User.findById(req.params.id);
   if (!user) { res.status(404); throw new Error('User not found'); }
 
-  const { name, role, jobTitle, isActive, organization, skills, isSuperAdmin, phone, linkedinUrl } = req.body;
+  const { name, role, userType, jobTitle, isActive, organization, skills, handles, isSuperAdmin, phone, linkedinUrl } = req.body;
   const wantSuper = isSuperAdmin === true || isSuperAdmin === 'true';
 
   // A super admin can't be deactivated. Its role can't be changed unless it's
@@ -147,6 +232,7 @@ export const updateUser = asyncHandler(async (req, res) => {
   if (phone !== undefined) user.phone = phone;
   if (linkedinUrl !== undefined) user.linkedinUrl = linkedinUrl;
   if (skills !== undefined) user.skills = parseSkills(skills);
+  if (handles !== undefined) user.handles = await parseHandles(handles);
   if (typeof isActive === 'boolean') user.isActive = isActive;
 
   const nextRole = role && Object.values(ROLES).includes(role) ? role : user.role;
@@ -161,11 +247,13 @@ export const updateUser = asyncHandler(async (req, res) => {
     user.organization = null; // ADMIN is global
   }
   user.role = nextRole;
+  if (nextRole === ROLES.USER) user.userType = normalizeUserType(userType || user.userType);
+  else user.userType = undefined;
 
   // Promote/demote super admin (global, no organization).
   if (isSuperAdmin !== undefined) {
     user.isSuperAdmin = wantSuper;
-    if (wantSuper) { user.role = ROLES.ADMIN; user.organization = null; }
+    if (wantSuper) { user.role = ROLES.ADMIN; user.organization = null; user.userType = undefined; }
   }
   await user.save();
 
@@ -228,6 +316,16 @@ export const updateProfile = asyncHandler(async (req, res) => {
     user.avatarPublicId = publicId;
   }
   await user.save();
+
+  logActivity({
+    user: req.user._id,
+    organization: user.organization,
+    action: ACTIVITY_ACTIONS.PROFILE_UPDATED,
+    description: `${user.name} updated their profile`,
+    entityType: 'User',
+    entityId: user._id,
+  });
+
   res.json({ success: true, user: sanitize(user) });
 });
 
@@ -245,6 +343,16 @@ export const changePassword = asyncHandler(async (req, res) => {
   }
   user.password = newPassword;
   await user.save();
+
+  logActivity({
+    user: req.user._id,
+    organization: user.organization,
+    action: ACTIVITY_ACTIONS.USER_UPDATED,
+    description: `${user.name} changed their password`,
+    entityType: 'User',
+    entityId: user._id,
+  });
+
   res.json({ success: true, message: 'Password updated' });
 });
 
@@ -257,24 +365,20 @@ export const updateSettings = asyncHandler(async (req, res) => {
     user.settings.notifications = { ...user.settings.notifications.toObject?.() ?? user.settings.notifications, ...notifications };
   }
   await user.save();
+
+  logActivity({
+    user: req.user._id,
+    organization: user.organization,
+    action: ACTIVITY_ACTIONS.PROFILE_UPDATED,
+    description: `${user.name} updated their settings`,
+    entityType: 'User',
+    entityId: user._id,
+  });
+
   res.json({ success: true, settings: user.settings });
 });
 
 // ======================= PROFILE COMPLETION + REVIEW =======================
-
-// Validate a handles payload: [{ organization, platforms: [] }] with real orgs.
-const parseHandles = async (raw) => {
-  const arr = Array.isArray(raw) ? raw : [];
-  const clean = [];
-  for (const h of arr.slice(0, 20)) {
-    if (!h?.organization) continue;
-    const org = await Organization.findById(h.organization).select('_id');
-    if (!org) continue;
-    const platforms = (Array.isArray(h.platforms) ? h.platforms : []).map((p) => String(p).trim()).filter(Boolean).slice(0, 10);
-    if (platforms.length) clean.push({ organization: org._id, platforms });
-  }
-  return clean;
-};
 
 // @route PUT /api/users/profile/complete — the FIRST profile fill-in after the
 // account is created. Applies directly (no review) and unlocks the app.
@@ -292,7 +396,7 @@ export const completeProfile = asyncHandler(async (req, res) => {
   if (!skillList.length) { res.status(400); throw new Error('Add at least one skill'); }
   if (!toolList.length) { res.status(400); throw new Error('Add at least one tool you know'); }
   const handleList = await parseHandles(handles);
-  if (user.role === ROLES.USER && !handleList.length) {
+  if (user.role === ROLES.USER && user.userType === USER_TYPES.SOCIAL_HANDLER && !handleList.length) {
     res.status(400); throw new Error('Add at least one organization/page you handle');
   }
 

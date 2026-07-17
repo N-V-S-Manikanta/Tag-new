@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-import { PLATFORMS, APPROVAL_STATUS } from '../config/constants.js';
+import { PLATFORMS, APPROVAL_STATUS, APPROVAL_TYPES } from '../config/constants.js';
 
 // Images live in the `approvalImages` collection (models/ApprovalImage.js) and
 // feedback points live in the `approvalComments` collection
@@ -25,10 +25,23 @@ const reviewSchema = new mongoose.Schema(
   { _id: true }
 );
 
+const forwardTargetSchema = new mongoose.Schema(
+  {
+    organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true },
+    platform: { type: String, enum: PLATFORMS, required: true },
+    handlers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+  },
+  { _id: false }
+);
+
 const approvalRequestSchema = new mongoose.Schema(
   {
     organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true, index: true },
     title: { type: String, required: true, trim: true },
+    // POST = ready-to-publish content; DESIGN = creative work that, once
+    // approved, is assigned to a social-media handler who raises the linked
+    // POST request. Legacy documents without the field are treated as POST.
+    type: { type: String, enum: Object.values(APPROVAL_TYPES), default: APPROVAL_TYPES.POST, index: true },
     platform: { type: String, enum: PLATFORMS, required: true },
     caption: { type: String, default: '' },
     description: { type: String, default: '' },
@@ -48,6 +61,20 @@ const approvalRequestSchema = new mongoose.Schema(
     approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     rejectedAt: { type: Date },
     resubmittedAt: { type: Date },
+
+    // DESIGN pipeline: who the approved design was handed to for publishing…
+    assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null, index: true },
+    assignedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    assignedAt: { type: Date },
+    // …and the POST request the handler raised from it (back-linked both ways).
+    linkedPost: { type: mongoose.Schema.Types.ObjectId, ref: 'ApprovalRequest', default: null },
+    sourceDesign: { type: mongoose.Schema.Types.ObjectId, ref: 'ApprovalRequest', default: null },
+    deliveryMode: { type: String, enum: ['DIGITAL', 'PRINT'], default: 'DIGITAL' },
+    forwardedTargets: [forwardTargetSchema],
+    forwardedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    forwardedAt: { type: Date },
+    // Flattened fast-lookup list for assignee checks in query filters.
+    forwardedHandlers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User', index: true }],
 
     // post completion
     postedAt: { type: Date },

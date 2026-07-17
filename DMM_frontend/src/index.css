@@ -114,6 +114,14 @@
   from { transform: translateX(-110%); }
   to   { transform: translateX(220%); }
 }
+@keyframes tag-float {
+  from { transform: translateY(0); }
+  to   { transform: translateY(-6px); }
+}
+@keyframes tag-progress-shine {
+  0%        { transform: translateX(-130%); }
+  45%, 100% { transform: translateX(330%); }
+}
 
 @layer components {
   /* -- Left panel: breathing aurora (2 counter-rotating conic meshes).
@@ -171,6 +179,10 @@
     -webkit-mask-image: linear-gradient(to bottom, black, transparent);
     mask-image: linear-gradient(to bottom, black, transparent);
   }
+
+  /* -- Login preview scene: gentle levitation + periodic shine on progress -- */
+  .login-float { animation: tag-float 5s ease-in-out infinite alternate; }
+  .login-progress-shine { animation: tag-progress-shine 3.6s ease-in-out 2.8s infinite; }
 
   /* -- Login fields: soft tinted fill that turns crisp white on focus -- */
   .login-input {

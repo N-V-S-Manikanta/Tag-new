@@ -9,7 +9,7 @@ import { cn, formatNumber } from '../lib/utils.js';
 // `interactions` sits high (right after the audience total) because on some
 // platforms — Facebook via Meta especially — it's the main engagement signal we
 // actually receive, while reach/views are Instagram-only and stay 0 for Facebook.
-const HIGHLIGHT_PRIORITY = ['followers', 'interactions', 'subscribers', 'impressions', 'engagementRate', 'newFollowers', 'reach', 'views', 'videoCount', 'pageViews'];
+const HIGHLIGHT_PRIORITY = ['followers', 'interactions', 'visits', 'subscribers', 'impressions', 'engagementRate', 'newFollowers', 'reach', 'views', 'videoCount', 'pageViews'];
 const fmt = (v, isPct) => (isPct ? `${Number(v || 0).toFixed(2)}%` : formatNumber(v || 0));
 const fmtDate = (d) => new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 

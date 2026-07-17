@@ -4,6 +4,7 @@ import {
   getAnalyticsPulse,
   getPlatformReport,
   getPlatformHistory,
+  getPlatformHeatmap,
   compareOrganizations,
   getAnalyticsOverview,
   recordAnalytics,
@@ -28,5 +29,6 @@ router.delete('/', authorize(ROLES.ADMIN, ROLES.CEO), clearAnalytics);
 router.post('/import', authorize(ROLES.ADMIN, ROLES.CEO), upload.single('file'), importAnalytics);
 router.get('/:platform/report', getPlatformReport);
 router.get('/:platform/history', getPlatformHistory);
+router.get('/:platform/heatmap', getPlatformHeatmap);
 
 export default router;

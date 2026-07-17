@@ -35,6 +35,7 @@ export const analyticsApi = {
   get: (organizationId) => api.get('/analytics', { params: { organizationId } }).then((r) => r.data),
   report: (platform, organizationId, range, anchor, from, to) => api.get(`/analytics/${platform}/report`, { params: { organizationId, range, anchor, from, to } }).then((r) => r.data),
   history: (platform, organizationId) => api.get(`/analytics/${platform}/history`, { params: { organizationId } }).then((r) => r.data),
+  heatmap: (platform, organizationId, metric) => api.get(`/analytics/${platform}/heatmap`, { params: { organizationId, metric } }).then((r) => r.data),
   pulse: () => api.get('/analytics/pulse').then((r) => r.data),
 };
 
@@ -139,6 +140,10 @@ export const approvalApi = {
   resubmit: (id, formData) =>
     api.put(`/approvals/${id}/resubmit`, formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data),
   markPosted: (id) => api.put(`/approvals/${id}/posted`).then((r) => r.data),
+  // Design → post pipeline: hand an approved design to a platform handler.
+  assign: (id, userId) => api.put(`/approvals/${id}/assign`, { userId }).then((r) => r.data),
+  forward: (id, targets) => api.put(`/approvals/${id}/forward`, { targets }).then((r) => r.data),
+  handlers: (organizationId, platform) => api.get('/users/handlers', { params: { organizationId, platform } }).then((r) => r.data),
   comment: (id, formData) =>
     api.post(`/approvals/${id}/comments`, formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data),
   remove: (id) => api.delete(`/approvals/${id}`).then((r) => r.data),
@@ -148,6 +153,12 @@ export const approvalApi = {
 export const aiApi = {
   status: () => api.get('/ai/status').then((r) => r.data),
   chat: (messages) => api.post('/ai/chat', { messages }).then((r) => r.data),
+  // Generate on-brand caption/hashtags/description from a short brief.
+  draft: (payload) => api.post('/ai/draft', payload).then((r) => r.data),
+  // Plain-English read-out of an organization's analytics (server-cached 6h).
+  insights: (organization, refresh = false) => api.post('/ai/insights', { organization, refresh }).then((r) => r.data),
+  // Pre-approval quality review of a post's copy (approvers only).
+  review: (approvalId) => api.post('/ai/review', { approvalId }).then((r) => r.data),
 };
 
 // ---- Link preview (Open-Graph thumbnail/title) ----
@@ -185,9 +196,15 @@ export const notificationApi = {
   remove: (id) => api.delete(`/notifications/${id}`).then((r) => r.data),
 };
 
+export const workAssignmentApi = {
+  list: (params) => api.get('/work-assignments', { params }).then((r) => r.data),
+};
+
 // ---- Activity ----
 export const activityApi = {
   list: (params) => api.get('/activity', { params }).then((r) => r.data),
+  heatmap: (params) => api.get('/activity/heatmap', { params }).then((r) => r.data),
+  day: (params) => api.get('/activity/day', { params }).then((r) => r.data),
 };
 
 // ---- Reports / Analytics ----

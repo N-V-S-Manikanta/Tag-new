@@ -31,6 +31,7 @@ import SocialAnalytics from './pages/SocialAnalytics.jsx';
 import Reports from './pages/Reports.jsx';
 import Notifications from './pages/Notifications.jsx';
 import Settings from './pages/Settings.jsx';
+import MyAssignedWork from './pages/MyAssignedWork.jsx';
 
 // Until a newly-created USER completes their profile (name, phone, skills,
 // tools, pages handled), every page redirects to /profile.
@@ -104,6 +105,7 @@ export default function App() {
         <Route path="/social-analytics" element={<SocialAnalytics />} />
         <Route path="/approval-analytics" element={<ApprovalAnalytics />} />
         <Route path="/reports" element={<Reports />} />
+        <Route path="/my-assigned-work" element={<MyAssignedWork />} />
         <Route path="/notifications" element={<Notifications />} />
         <Route path="/settings" element={<Settings />} />
       </Route>

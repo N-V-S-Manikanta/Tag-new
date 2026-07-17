@@ -5,16 +5,15 @@ import {
   updateBrandAsset,
   deleteBrandAsset,
 } from '../controllers/brandAssetController.js';
-import { protect, authorize } from '../middleware/auth.js';
+import { protect, requireSuperAdmin } from '../middleware/auth.js';
 import upload from '../middleware/upload.js';
-import { ROLES } from '../config/constants.js';
 
 const router = express.Router();
 router.use(protect);
 
-router.get('/', listBrandAssets);                                              // org members can view/download
-router.post('/', authorize(ROLES.ADMIN), upload.single('file'), createBrandAsset);
-router.put('/:id', authorize(ROLES.ADMIN), updateBrandAsset);
-router.delete('/:id', authorize(ROLES.ADMIN), deleteBrandAsset);
+router.get('/', listBrandAssets);                          // anyone signed in can view/download
+router.post('/', upload.single('file'), createBrandAsset); // anyone signed in can upload
+router.put('/:id', requireSuperAdmin, updateBrandAsset);   // only the super admin can edit
+router.delete('/:id', requireSuperAdmin, deleteBrandAsset);// only the super admin can remove
 
 export default router;

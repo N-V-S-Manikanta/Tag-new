@@ -28,6 +28,9 @@ const organizationSchema = new mongoose.Schema(
     metaPageName: { type: String, default: '' },
     metaInstagramId: { type: String, default: '' },
     metaInstagramUsername: { type: String, default: '' },
+    metaAdAccountId: { type: String, default: '' },
+    metaAdAccountName: { type: String, default: '' },
+    metaAdCurrency: { type: String, default: '' },
 
     // YouTube channel mapping — the API key lives only in the backend env
     // (YOUTUBE_API_KEY); we store just the channel id/title to pull public stats.

@@ -5,8 +5,9 @@ import toast from 'react-hot-toast';
 import {
   ArrowLeft, Check, X, Plus, Trash2, Hash, Play, Send, Paperclip, Inbox,
   CheckCircle2, RefreshCw, MessageSquareWarning, FileText, Rocket, Images as ImagesIcon,
+  UserCheck, Palette, Building2,
 } from 'lucide-react';
-import { approvalApi } from '../api/endpoints.js';
+import { approvalApi, organizationApi } from '../api/endpoints.js';
 import { useAuthStore } from '../store/authStore.js';
 import PageHeader from '../components/layout/PageHeader.jsx';
 import { Button } from '../components/ui/Button.jsx';
@@ -14,11 +15,13 @@ import { Card, Input, Avatar, Skeleton, EmptyState } from '../components/ui/prim
 import { Modal } from '../components/ui/Modal.jsx';
 import { formatDate, formatDateTime, timeAgo, cn, isVideo } from '../lib/utils.js';
 import { StatusPill, FeedbackCategoryTag, FEEDBACK_CATEGORIES } from './Approvals.jsx';
+import ReviewAssist from '../components/ReviewAssist.jsx';
 
 export default function ApprovalDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const { user } = useAuthStore();
   const [rejectOpen, setRejectOpen] = useState(false);
 
   // Live-chat feel: poll every 3s while the page is open (paused when the tab
@@ -73,7 +76,7 @@ export default function ApprovalDetail() {
     );
   }
 
-  const canDecide = r.status === 'PENDING' || r.status === 'RESUBMITTED';
+  const canDecide = !!user?.isSuperAdmin && (r.status === 'PENDING' || r.status === 'RESUBMITTED');
 
   return (
     <div>
@@ -86,6 +89,12 @@ export default function ApprovalDetail() {
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2.5">
             <h1 className="text-2xl font-extrabold tracking-tight text-slate-800 dark:text-white">{r.title}</h1>
+            <span className={cn('inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold uppercase tracking-wide',
+              r.type === 'DESIGN'
+                ? 'bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300'
+                : 'bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300')}>
+              {r.type === 'DESIGN' ? <><Palette className="h-3 w-3" /> Design</> : <><Send className="h-3 w-3" /> Post</>}
+            </span>
             <StatusPill status={r.status} />
           </div>
           <p className="mt-1 text-sm text-slate-400">Request #{String(r._id).slice(-6).toUpperCase()} · Updated {formatDateTime(r.updatedAt)}</p>
@@ -108,6 +117,9 @@ export default function ApprovalDetail() {
       <div className="grid gap-5 lg:grid-cols-3">
         <div className="space-y-5 lg:col-span-2">
           <LifecycleCard r={r} />
+          {r.type === 'DESIGN' && <AssignmentCard r={r} user={user} onChanged={invalidate} navigate={navigate} />}
+          {/* Pre-approval AI quality check — posts awaiting a decision only */}
+          {r.type !== 'DESIGN' && canDecide && <ReviewAssist approvalId={id} />}
           <DetailsCard r={r} />
           <GalleryCard images={r.images || []} />
         </div>
@@ -129,9 +141,12 @@ const STEP_CIRCLE = {
 };
 
 function LifecycleCard({ r }) {
-  // Furthest stage reached: 1 = in review (any pre-decision status), 2 = approved, 3 = posted.
-  const stageIdx = r.status === 'POSTED' ? 3 : r.status === 'APPROVED' ? 2 : 1;
-  const percent = (stageIdx + 1) * 25;
+  const isDesign = r.type === 'DESIGN';
+  // Furthest stage reached. POST: 1 review, 2 approved, 3 posted.
+  // DESIGN adds an "Assigned" stage between approved and posted.
+  const stageIdx = isDesign
+    ? (r.status === 'POSTED' ? 4 : r.assignedTo ? 3 : r.status === 'APPROVED' ? 2 : 1)
+    : (r.status === 'POSTED' ? 3 : r.status === 'APPROVED' ? 2 : 1);
   const resubmits = r.resubmitCount || 0;
 
   const reviewStep = r.status === 'REJECTED'
@@ -146,12 +161,18 @@ function LifecycleCard({ r }) {
     { label: 'Submitted', sub: formatDate(r.createdAt), state: 'done' },
     reviewStep,
     stageIdx >= 2
-      ? { label: 'Approved', sub: formatDate(r.approvedAt), state: 'done' }
+      ? { label: 'Approved', sub: formatDate(r.approvedAt), state: stageIdx === 2 && isDesign ? 'current' : 'done' }
       : { label: 'Approved', sub: '—', state: 'upcoming' },
-    stageIdx === 3
+    ...(isDesign
+      ? [stageIdx >= 3
+          ? { label: 'Assigned', sub: `${r.assignedTo?.name || ''} · ${formatDate(r.assignedAt)}`, state: 'done' }
+          : { label: 'Assigned', sub: '—', state: 'upcoming' }]
+      : []),
+    stageIdx === (isDesign ? 4 : 3)
       ? { label: 'Posted', sub: formatDate(r.postedAt), state: 'done' }
       : { label: 'Posted', sub: '—', state: 'upcoming' },
   ];
+  const percent = Math.round(((stageIdx + 1) / steps.length) * 100);
 
   return (
     <Card className="p-5">
@@ -162,7 +183,7 @@ function LifecycleCard({ r }) {
       <div className="mb-5 h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
         <div className="h-full rounded-full bg-brand-500 transition-all duration-500" style={{ width: `${percent}%` }} />
       </div>
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+      <div className={cn('grid grid-cols-2 gap-4', steps.length === 5 ? 'sm:grid-cols-5' : 'sm:grid-cols-4')}>
         {steps.map((s, i) => (
           <div key={i} className="text-center">
             <span className={cn('mx-auto flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold', STEP_CIRCLE[s.state])}>
@@ -174,6 +195,228 @@ function LifecycleCard({ r }) {
         ))}
       </div>
     </Card>
+  );
+}
+
+/* ------------------- Design pipeline: handler assignment ------------------- */
+
+function AssignmentCard({ r, user, onChanged, navigate }) {
+  const canForward = !!user?.isSuperAdmin && r.status === 'APPROVED';
+  const [forwardOpen, setForwardOpen] = useState(false);
+  const forwarded = r.forwardedTargets || [];
+
+  if (!r.assignedTo && forwarded.length === 0 && !canForward) return null;
+
+  return (
+    <Card className="p-5">
+      <div className="mb-4 flex items-center justify-between">
+        <h3 className="flex items-center gap-2 font-bold text-slate-800 dark:text-white">
+          <UserCheck className="h-4 w-4 text-violet-500" /> Distribution
+        </h3>
+        {canForward && (
+          <Button size="sm" onClick={() => setForwardOpen(true)}>
+            <Send className="h-4 w-4" /> Forward to social handlers
+          </Button>
+        )}
+      </div>
+
+      {r.assignedTo && (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-100 p-3 dark:border-slate-800">
+          <div className="flex items-center gap-3">
+            <Avatar src={r.assignedTo?.avatar} name={r.assignedTo?.name} size="md" />
+            <div>
+              <p className="text-sm font-semibold text-slate-800 dark:text-white">{r.assignedTo?.name}</p>
+              <p className="text-xs text-slate-400">
+                Assigned {formatDate(r.assignedAt)}{r.assignedBy?.name ? ` by ${r.assignedBy.name}` : ''}
+              </p>
+            </div>
+          </div>
+          {r.linkedPost ? (
+            <Button size="sm" variant="outline" onClick={() => navigate(`/approvals/${r.linkedPost._id || r.linkedPost}`)}>
+              <Send className="h-4 w-4" /> View post request
+              {r.linkedPost.status && <StatusPill status={r.linkedPost.status} />}
+            </Button>
+          ) : (
+            <p className="text-xs font-medium text-violet-600 dark:text-violet-400">Waiting for the post request</p>
+          )}
+        </div>
+      )}
+
+      {forwarded.length > 0 ? (
+        <div className="space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+            Forwarded {r.forwardedAt ? `on ${formatDate(r.forwardedAt)}` : ''}{r.forwardedBy?.name ? ` by ${r.forwardedBy.name}` : ''}
+          </p>
+          {forwarded.map((t, idx) => (
+            <div key={`${t.organization?._id || t.organization}-${t.platform}-${idx}`} className="rounded-xl border border-slate-100 p-3 dark:border-slate-800">
+              <p className="flex items-center gap-1.5 text-sm font-semibold text-slate-700 dark:text-slate-200">
+                <Building2 className="h-4 w-4 text-slate-400" />
+                {t.organization?.name || 'Organization'} · {t.platform}
+              </p>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {(t.handlers || []).map((h) => (
+                  <span key={h._id || h} className="inline-flex items-center gap-1 rounded-full bg-brand-50 px-2 py-0.5 text-xs font-medium text-brand-700 dark:bg-brand-500/10 dark:text-brand-300">
+                    <Avatar src={h.avatar} name={h.name} size="sm" className="h-4 w-4 text-[9px]" />
+                    {h.name || 'Handler'}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="rounded-xl border border-dashed border-slate-200 p-4 text-sm text-slate-400 dark:border-slate-700">
+          This approved design is not forwarded to social handlers yet.
+        </p>
+      )}
+
+      {forwardOpen && (
+        <ForwardModal
+          request={r}
+          onClose={() => setForwardOpen(false)}
+          onDone={() => { setForwardOpen(false); onChanged(); }}
+        />
+      )}
+    </Card>
+  );
+}
+
+const FORWARD_PLATFORMS = ['LinkedIn', 'Instagram', 'YouTube', 'Facebook'];
+
+function ForwardModal({ request, onClose, onDone }) {
+  const [rows, setRows] = useState([{ organizationId: '', platform: request.platform || 'LinkedIn', handlerIds: [] }]);
+  const [optionsByKey, setOptionsByKey] = useState({});
+  const [loading, setLoading] = useState(false);
+
+  const { data: orgData } = useQuery({ queryKey: ['forward-orgs'], queryFn: () => organizationApi.list() });
+  const orgs = orgData?.organizations || [];
+
+  useEffect(() => {
+    rows.forEach((row) => {
+      if (!row.organizationId || !row.platform) return;
+      const key = `${row.organizationId}::${row.platform}`;
+      if (optionsByKey[key]?.loaded || optionsByKey[key]?.loading) return;
+      setOptionsByKey((prev) => ({ ...prev, [key]: { ...(prev[key] || {}), loading: true } }));
+      approvalApi.handlers(row.organizationId, row.platform)
+        .then((data) => {
+          setOptionsByKey((prev) => ({
+            ...prev,
+            [key]: {
+              loaded: true,
+              loading: false,
+              handlers: [...(data.handlers || []), ...(data.fallback || [])],
+            },
+          }));
+        })
+        .catch(() => {
+          setOptionsByKey((prev) => ({ ...prev, [key]: { loaded: true, loading: false, handlers: [] } }));
+        });
+    });
+  }, [rows, optionsByKey]);
+
+  const setRow = (idx, patch) => {
+    setRows((prev) => prev.map((row, i) => (i === idx ? { ...row, ...patch } : row)));
+  };
+
+  const toggleHandler = (idx, handlerId) => {
+    setRows((prev) => prev.map((row, i) => {
+      if (i !== idx) return row;
+      const has = row.handlerIds.includes(handlerId);
+      return { ...row, handlerIds: has ? row.handlerIds.filter((id) => id !== handlerId) : [...row.handlerIds, handlerId] };
+    }));
+  };
+
+  const submit = async () => {
+    const clean = rows
+      .filter((r) => r.organizationId && r.platform)
+      .map((r) => ({ organization: r.organizationId, platform: r.platform, handlerIds: [...new Set(r.handlerIds)] }));
+    if (clean.length === 0) { toast.error('Add at least one target organization and platform'); return; }
+    if (clean.some((r) => r.handlerIds.length === 0)) { toast.error('Choose at least one handler for each target'); return; }
+
+    setLoading(true);
+    try {
+      await approvalApi.forward(request._id, clean);
+      toast.success('Design forwarded to social handlers');
+      onDone();
+    } catch (e) {
+      toast.error(e.response?.data?.message || 'Forwarding failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Modal open onClose={onClose} title="Forward approved design">
+      <p className="mb-4 text-sm text-slate-500 dark:text-slate-400">
+        Select colleges, platforms and the social handlers who should prepare the posting content for this approved design.
+      </p>
+
+      <div className="space-y-3">
+        {rows.map((row, idx) => {
+          const key = `${row.organizationId}::${row.platform}`;
+          const options = optionsByKey[key] || { handlers: [], loading: false };
+          return (
+            <div key={idx} className="rounded-xl border border-slate-200 p-3 dark:border-slate-700">
+              <div className="mb-3 grid gap-2 sm:grid-cols-2">
+                <Select
+                  value={row.organizationId}
+                  onChange={(e) => setRow(idx, { organizationId: e.target.value, handlerIds: [] })}
+                >
+                  <option value="">Select college</option>
+                  {orgs.map((o) => <option key={o._id} value={o._id}>{o.name}</option>)}
+                </Select>
+                <Select
+                  value={row.platform}
+                  onChange={(e) => setRow(idx, { platform: e.target.value, handlerIds: [] })}
+                >
+                  {FORWARD_PLATFORMS.map((p) => <option key={p} value={p}>{p}</option>)}
+                </Select>
+              </div>
+
+              {!row.organizationId ? (
+                <p className="text-xs text-slate-400">Choose a college to load handlers.</p>
+              ) : options.loading ? (
+                <Skeleton className="h-20" />
+              ) : options.handlers.length === 0 ? (
+                <p className="text-xs text-slate-400">No handlers found for this college and platform.</p>
+              ) : (
+                <div className="max-h-36 space-y-1 overflow-auto rounded-lg border border-slate-100 p-2 dark:border-slate-800">
+                  {options.handlers.map((h) => (
+                    <label key={h._id} className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-800">
+                      <input
+                        type="checkbox"
+                        checked={row.handlerIds.includes(h._id)}
+                        onChange={() => toggleHandler(idx, h._id)}
+                      />
+                      <Avatar src={h.avatar} name={h.name} size="sm" className="h-5 w-5 text-[9px]" />
+                      <span className="text-xs font-medium text-slate-700 dark:text-slate-200">{h.name}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+
+              <div className="mt-2 flex justify-end">
+                {rows.length > 1 && (
+                  <Button variant="outline" size="sm" onClick={() => setRows((prev) => prev.filter((_, i) => i !== idx))}>
+                    Remove
+                  </Button>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="mt-3 flex justify-between">
+        <Button variant="ghost" size="sm" onClick={() => setRows((prev) => [...prev, { organizationId: '', platform: request.platform || 'LinkedIn', handlerIds: [] }])}>
+          <Plus className="h-4 w-4" /> Add college/platform
+        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button loading={loading} onClick={submit}>Forward</Button>
+        </div>
+      </div>
+    </Modal>
   );
 }
 
@@ -189,8 +432,24 @@ const DetailField = ({ label, children }) => (
 function DetailsCard({ r }) {
   return (
     <Card className="p-5">
-      <h3 className="mb-4 font-bold text-slate-800 dark:text-white">Post details</h3>
+      <h3 className="mb-4 font-bold text-slate-800 dark:text-white">{r.type === 'DESIGN' ? 'Design details' : 'Post details'}</h3>
       <div className="grid gap-4 sm:grid-cols-2">
+        {r.sourceDesign && (
+          <DetailField label="Created from design">
+            <Link to={`/approvals/${r.sourceDesign._id || r.sourceDesign}`}
+              className="inline-flex items-center gap-1.5 font-medium text-violet-600 hover:text-violet-700 dark:text-violet-400 dark:hover:text-violet-300">
+              <Palette className="h-3.5 w-3.5" /> {r.sourceDesign?.title || 'View design'}
+            </Link>
+          </DetailField>
+        )}
+        {r.type === 'DESIGN' && r.linkedPost && (
+          <DetailField label="Post request">
+            <Link to={`/approvals/${r.linkedPost._id || r.linkedPost}`}
+              className="inline-flex items-center gap-1.5 font-medium text-violet-600 hover:text-violet-700 dark:text-violet-400 dark:hover:text-violet-300">
+              <Send className="h-3.5 w-3.5" /> {r.linkedPost?.title || 'View post'}
+            </Link>
+          </DetailField>
+        )}
         <DetailField label="Organization">
           <span className="inline-flex items-center gap-1.5">
             <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: r.organization?.color || '#7c3aed' }} />

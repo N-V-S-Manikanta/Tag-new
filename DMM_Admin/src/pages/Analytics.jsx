@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { Linkedin, Instagram, Youtube, Facebook, Save, BarChart3, PenLine, Trophy, Users, Upload, Download, FileSpreadsheet, Trash2, LayoutGrid, Zap } from 'lucide-react';
+import { Linkedin, Instagram, Youtube, Facebook, Save, BarChart3, PenLine, Trophy, Users, Upload, Download, FileSpreadsheet, Trash2, LayoutGrid, Zap, BadgeIndianRupee } from 'lucide-react';
 import { analyticsApi } from '../api/endpoints.js';
 import { downloadBlob } from '../lib/utils.js';
 import { useOrgStore } from '../store/orgStore.js';
+import { useAuthStore } from '../store/authStore.js';
 import PageHeader from '../components/layout/PageHeader.jsx';
 import OrgPicker from '../components/OrgPicker.jsx';
 import AnalyticsReport from '../components/AnalyticsReport.jsx';
@@ -14,6 +15,7 @@ import OrgCompare from '../components/OrgCompare.jsx';
 import AnalyticsOverview from '../components/AnalyticsOverview.jsx';
 import MetaSync from '../components/MetaSync.jsx';
 import YoutubeSync from '../components/YoutubeSync.jsx';
+import PaidPromotionPanel from '../components/PaidPromotionPanel.jsx';
 import { Button } from '../components/ui/Button.jsx';
 import { Card, Input } from '../components/ui/primitives.jsx';
 import { cn } from '../lib/utils.js';
@@ -29,6 +31,7 @@ export default function Analytics() {
   const [tab, setTab] = useState('overview');
   const [pendingPlatform, setPendingPlatform] = useState(null);
   const { setSelectedOrg } = useOrgStore();
+  const { user } = useAuthStore();
 
   // From the overview grid: jump straight to one org + platform's analytics.
   const openOrgPlatform = (orgId, platform) => {
@@ -44,10 +47,12 @@ export default function Analytics() {
         <TabBtn active={tab === 'overview'} onClick={() => setTab('overview')} icon={LayoutGrid}>Overview grid</TabBtn>
         <TabBtn active={tab === 'org'} onClick={() => setTab('org')} icon={BarChart3}>Per organization</TabBtn>
         <TabBtn active={tab === 'compare'} onClick={() => setTab('compare')} icon={Trophy}>Compare organizations</TabBtn>
+        {user?.isSuperAdmin && <TabBtn active={tab === 'paid'} onClick={() => setTab('paid')} icon={BadgeIndianRupee}>Paid promotion</TabBtn>}
       </div>
       {tab === 'overview' && <AnalyticsOverview onOpen={openOrgPlatform} />}
       {tab === 'org' && <OrgPicker>{(orgId) => <OrgAnalytics orgId={orgId} initialPlatform={pendingPlatform} />}</OrgPicker>}
       {tab === 'compare' && <OrgCompare />}
+      {tab === 'paid' && user?.isSuperAdmin && <OrgPicker>{(orgId) => <PaidPromotionPanel orgId={orgId} />}</OrgPicker>}
     </div>
   );
 }

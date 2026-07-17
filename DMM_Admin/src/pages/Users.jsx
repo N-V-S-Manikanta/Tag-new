@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import {
-  UserPlus, Search, Pencil, KeyRound, Trash2, Users as UsersIcon, ShieldCheck, Crown, User as UserIcon, MoreVertical, Power,
+  UserPlus, Search, Pencil, KeyRound, Trash2, Users as UsersIcon, ShieldCheck, Crown, User as UserIcon, MoreVertical, Power, Plus, X,
 } from 'lucide-react';
 import { userApi, organizationApi } from '../api/endpoints.js';
 import { useAuthStore } from '../store/authStore.js';
@@ -17,6 +17,9 @@ import { formatDate, roleLabel, roleStyle } from '../lib/utils.js';
 const ROLE_FILTERS = [{ value: 'ADMIN', label: 'Super Admin' }, { value: 'CEO', label: 'Admin' }, { value: 'USER', label: 'User' }];
 // Roles the super admin can assign. 'SUPER' is a UI value → role ADMIN + isSuperAdmin.
 const CREATE_ROLES = [{ value: 'SUPER', label: 'Super Admin (all organizations)' }, { value: 'CEO', label: 'Admin' }, { value: 'USER', label: 'User' }];
+const USER_TYPES = [{ value: 'DESIGNER', label: 'Designer' }, { value: 'SOCIAL_HANDLER', label: 'Social Handler' }];
+const PAGE_PLATFORMS = ['LinkedIn', 'Instagram', 'YouTube', 'Facebook', 'X (Twitter)'];
+const AZAR_HANDLE_ORGS = ['Torii Minds', 'NCET', 'NCMS', 'NDC', 'Technical Hub'];
 const roleIcon = (u) => (u?.isSuperAdmin ? ShieldCheck : u?.role === 'USER' ? UserIcon : Crown);
 
 export default function Users() {
@@ -113,7 +116,15 @@ export default function Users() {
                           <Avatar src={u.avatar} name={u.name} size="sm" />
                           <div>
                             <p className="font-semibold text-slate-700 dark:text-slate-200">{u.name} {isSelf && <span className="text-xs font-normal text-slate-400">(you)</span>}</p>
-                            <p className="text-xs text-slate-400">{u.email}{u.jobTitle ? ` · ${u.jobTitle}` : ''}</p>
+                            <p className="text-xs text-slate-400">
+                              {u.email}{u.jobTitle ? ` · ${u.jobTitle}` : ''}
+                              {u.role === 'USER' && u.userType ? ` · ${u.userType === 'SOCIAL_HANDLER' ? 'Social Handler' : 'Designer'}` : ''}
+                            </p>
+                            {u.handles?.length > 0 && (
+                              <p className="mt-1 text-[11px] text-slate-400">
+                                Handles {u.handles.map((h) => `${h.organization?.name || 'Org'}: ${(h.platforms || []).join(', ')}`).join(' · ')}
+                              </p>
+                            )}
                             {u.skills?.length > 0 && (
                               <div className="mt-1 flex flex-wrap gap-1">
                                 {u.skills.slice(0, 4).map((s, i) => (
@@ -186,15 +197,57 @@ function UserFormModal({ editUser, onClose, onSaved }) {
   const [form, setForm] = useState({
     name: editUser?.name || '', email: editUser?.email || '', password: '',
     role: editUser?.isSuperAdmin ? 'SUPER' : (editUser?.role || 'USER'), jobTitle: editUser?.jobTitle || '',
+    userType: editUser?.userType || 'DESIGNER',
     phone: editUser?.phone || '', linkedinUrl: editUser?.linkedinUrl || '',
     skills: (editUser?.skills || []).join(', '),
     organization: editUser?.organization?._id || editUser?.organization || '',
+    handles: (editUser?.handles || []).length
+      ? editUser.handles.map((h) => ({ organization: String(h.organization?._id || h.organization), platforms: h.platforms || [] }))
+      : [{ organization: '', platforms: [] }],
   });
   const [loading, setLoading] = useState(false);
   const { data: orgData } = useQuery({ queryKey: ['organizations', 'all'], queryFn: () => organizationApi.list() });
   const orgs = orgData?.organizations || [];
   const isSuper = form.role === 'SUPER';
   const needsOrg = form.role === 'CEO' || form.role === 'USER';
+  const needsUserType = form.role === 'USER';
+
+  const updateHandle = (index, patch) => {
+    setForm((prev) => ({
+      ...prev,
+      handles: prev.handles.map((row, i) => (i === index ? { ...row, ...patch } : row)),
+    }));
+  };
+
+  const togglePlatform = (index, platform) => {
+    setForm((prev) => {
+      const row = prev.handles[index];
+      const platforms = row.platforms.includes(platform)
+        ? row.platforms.filter((p) => p !== platform)
+        : [...row.platforms, platform];
+      return { ...prev, handles: prev.handles.map((item, i) => (i === index ? { ...item, platforms } : item)) };
+    });
+  };
+
+  const addHandleRow = () => setForm((prev) => ({ ...prev, handles: [...prev.handles, { organization: '', platforms: [] }] }));
+  const removeHandleRow = (index) => setForm((prev) => ({ ...prev, handles: prev.handles.filter((_, i) => i !== index) }));
+  const cleanHandles = (rows) => rows.filter((h) => h.organization && h.platforms.length).map((h) => ({ organization: h.organization, platforms: h.platforms }));
+
+  useEffect(() => {
+    if (!editUser) return;
+    if (String(editUser.name || '').trim().toLowerCase() !== 'azar') return;
+    if ((editUser.handles || []).length) return;
+    if (!orgs.length) return;
+
+    const preset = AZAR_HANDLE_ORGS
+      .map((name) => orgs.find((org) => org.name?.trim().toLowerCase() === name.trim().toLowerCase()))
+      .filter(Boolean)
+      .map((org) => ({ organization: org._id, platforms: ['LinkedIn'] }));
+
+    if (preset.length) {
+      setForm((prev) => ({ ...prev, handles: preset }));
+    }
+  }, [editUser, orgs]);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -203,8 +256,10 @@ function UserFormModal({ editUser, onClose, onSaved }) {
     try {
       const payload = {
         name: form.name, role: isSuper ? 'ADMIN' : form.role, isSuperAdmin: isSuper,
+        userType: form.role === 'USER' ? form.userType : null,
         jobTitle: form.jobTitle, phone: form.phone, linkedinUrl: form.linkedinUrl,
         skills: form.skills,
+        handles: cleanHandles(form.handles),
         organization: needsOrg ? form.organization : null,
       };
       if (editUser) { await userApi.update(editUser._id, payload); toast.success('User updated'); }
@@ -226,6 +281,11 @@ function UserFormModal({ editUser, onClose, onSaved }) {
           </Select>
           <Input label="Job title" value={form.jobTitle} onChange={(e) => setForm({ ...form, jobTitle: e.target.value })} placeholder="e.g. Manager" />
         </div>
+        {needsUserType && (
+          <Select label="User type" value={form.userType} onChange={(e) => setForm({ ...form, userType: e.target.value })}>
+            {USER_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+          </Select>
+        )}
         <div className="grid grid-cols-2 gap-3">
           <Input label="Phone / contact number" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="+91 98765 43210" />
           <Input label="LinkedIn profile URL" value={form.linkedinUrl} onChange={(e) => setForm({ ...form, linkedinUrl: e.target.value })} placeholder="https://linkedin.com/in/…" />
@@ -238,6 +298,46 @@ function UserFormModal({ editUser, onClose, onSaved }) {
             ))}
           </div>
         )}
+        <div>
+          <span className="mb-1.5 block text-sm font-medium text-slate-600 dark:text-slate-300">Pages you handle (organization + platforms)</span>
+          <div className="space-y-2.5">
+            {form.handles.map((row, index) => (
+              <div key={index} className="rounded-xl border border-slate-200 p-3 dark:border-slate-700">
+                <div className="flex items-center gap-2">
+                  <Select value={row.organization} onChange={(e) => updateHandle(index, { organization: e.target.value })} className="flex-1">
+                    <option value="">— Choose organization —</option>
+                    {orgs.map((o) => <option key={o._id} value={o._id}>{o.name}</option>)}
+                  </Select>
+                  {form.handles.length > 1 && (
+                    <button type="button" onClick={() => removeHandleRow(index)} aria-label="Remove row" className="rounded-lg p-2 text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10">
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {PAGE_PLATFORMS.map((platform) => (
+                    <button
+                      key={platform}
+                      type="button"
+                      onClick={() => togglePlatform(index, platform)}
+                      className={cn(
+                        'rounded-lg border px-2.5 py-1 text-xs font-semibold transition',
+                        row.platforms.includes(platform)
+                          ? 'border-transparent bg-brand-600 text-white'
+                          : 'border-slate-200 text-slate-500 hover:border-brand-300 dark:border-slate-700 dark:text-slate-400'
+                      )}
+                    >
+                      {platform}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+          <button type="button" onClick={addHandleRow} className="mt-2 inline-flex items-center gap-1 text-sm font-semibold text-brand-600 hover:text-brand-700">
+            <Plus className="h-4 w-4" /> Add another organization
+          </button>
+        </div>
         {needsOrg ? (
           <Select label="Organization" value={form.organization} onChange={(e) => setForm({ ...form, organization: e.target.value })}>
             <option value="">Select an organization…</option>

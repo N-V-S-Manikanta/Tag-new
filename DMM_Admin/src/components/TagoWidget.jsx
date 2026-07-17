@@ -13,10 +13,10 @@ const QUICK_ASKS = [
   'What happened this week?',
 ];
 
-// Tago — the floating assistant. A circular launcher pinned to the bottom-right
-// of every page; opens a compact chat that shares the same live-data brain as
-// the full Assistant page. Conversation survives page navigation (the widget
-// lives in the layout, above the router outlet).
+// Tago — the assistant button that lives in the topbar (PAM-AI-style pill).
+// Opens a compact chat panel anchored under the header that shares the same
+// live-data brain as the full Assistant page. Conversation survives page
+// navigation (the widget lives in the layout, above the router outlet).
 export default function TagoWidget() {
   const { user } = useAuthStore();
   const location = useLocation();
@@ -56,27 +56,26 @@ export default function TagoWidget() {
 
   return (
     <>
-      {/* Launcher */}
-      {!open && (
-        <button
-          onClick={() => setOpen(true)}
-          aria-label="Ask Tago, the AI assistant"
-          title="Ask Tago"
-          className="fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-brand-500 to-violet-600 text-white shadow-lg shadow-brand-500/30 transition hover:scale-110 hover:shadow-xl focus:outline-none focus:ring-4 focus:ring-brand-500/30"
-        >
-          <Sparkles className="h-6 w-6" />
-          {status?.configured && messages.length === 0 && (
-            <span className="absolute -right-0.5 -top-0.5 flex h-3.5 w-3.5">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
-              <span className="relative inline-flex h-3.5 w-3.5 rounded-full border-2 border-white bg-emerald-500 dark:border-slate-900" />
-            </span>
-          )}
-        </button>
-      )}
+      {/* Topbar pill launcher */}
+      <button
+        onClick={() => setOpen((v) => !v)}
+        aria-label="Ask Tago, the AI assistant"
+        aria-expanded={open}
+        title="Ask Tago"
+        className={cn(
+          'inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-3 text-sm font-semibold shadow-sm transition-colors',
+          open
+            ? 'border-brand-300 bg-brand-50 text-brand-700 dark:border-brand-500/50 dark:bg-brand-500/15 dark:text-brand-300'
+            : 'border-brand-200 bg-white text-brand-700 hover:border-brand-300 hover:bg-brand-50 dark:border-brand-500/30 dark:bg-slate-900 dark:text-brand-300 dark:hover:bg-slate-800'
+        )}
+      >
+        <Sparkles className="h-4 w-4" />
+        <span className="hidden sm:inline">Tago AI</span>
+      </button>
 
-      {/* Chat panel */}
+      {/* Chat panel — anchored under the header, below the pill */}
       {open && (
-        <div className="fixed bottom-6 right-6 z-50 flex h-[min(70vh,560px)] w-[min(92vw,380px)] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900">
+        <div className="fixed right-4 top-[4.5rem] z-50 flex h-[min(70vh,560px)] w-[min(92vw,380px)] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900 sm:right-6">
           {/* Header */}
           <div className="flex items-center gap-2.5 bg-gradient-to-r from-brand-500 to-violet-600 px-4 py-3 text-white">
             <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white/20"><Sparkles className="h-4 w-4" /></span>

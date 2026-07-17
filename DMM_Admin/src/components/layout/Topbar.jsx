@@ -5,6 +5,7 @@ import { useAuthStore } from '../../store/authStore.js';
 import { useThemeStore } from '../../store/themeStore.js';
 import { Avatar } from '../ui/primitives.jsx';
 import { roleLabel } from '../../lib/utils.js';
+import TagoWidget from '../TagoWidget.jsx';
 
 export default function Topbar({ onMenu }) {
   const navigate = useNavigate();
@@ -23,6 +24,9 @@ export default function Topbar({ onMenu }) {
       </div>
 
       <div className="ml-auto flex items-center gap-1.5">
+        {/* Tago — assistant pill + its chat panel (PAM-AI-style) */}
+        <TagoWidget />
+
         <button onClick={toggle} aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'} className="rounded-xl p-2.5 text-slate-500 transition-colors hover:bg-slate-100 dark:hover:bg-slate-800" title="Toggle theme">
           {theme === 'dark' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
         </button>

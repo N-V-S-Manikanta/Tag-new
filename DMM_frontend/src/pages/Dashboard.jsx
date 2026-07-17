@@ -1,15 +1,17 @@
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { motion } from 'framer-motion';
 import {
   FileText, CheckCircle2, Clock, XCircle, Send, Image as ImageIcon,
   FileImage, Layers, TrendingUp, Award,
 } from 'lucide-react';
 import { dashboardApi, organizationApi } from '../api/endpoints.js';
 import { useAuthStore } from '../store/authStore.js';
-import PageHeader from '../components/layout/PageHeader.jsx';
 import StatCard from '../components/dashboard/StatCard.jsx';
 import SocialCards from '../components/dashboard/SocialCards.jsx';
+import AiInsights from '../components/dashboard/AiInsights.jsx';
 import GoalCard from '../components/dashboard/GoalCard.jsx';
+import ActivityHeatmapCard from '../components/dashboard/ActivityHeatmapCard.jsx';
 import ActivityTimeline from '../components/dashboard/ActivityTimeline.jsx';
 import MyUploads from '../components/dashboard/MyUploads.jsx';
 import { MonthlyTrendChart, FollowerTrendChart, PlatformBarChart, StatusPieChart } from '../components/dashboard/Charts.jsx';
@@ -67,22 +69,47 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title={`Welcome back, ${user?.name?.split(' ')[0]} 👋`}
-        subtitle={isCEO ? 'Here is what is happening across your marketing operations.' : 'Track your content and stay on top of approvals.'}
-        actions={isAdmin && orgs.length > 0 && (
-          <select aria-label="Organization" className="input-base h-10 w-auto cursor-pointer text-sm font-semibold"
-            value={orgId} onChange={(e) => setOrgId(e.target.value)}>
-            {orgs.map((o) => <option key={o._id} value={o._id}>{o.name}</option>)}
-          </select>
-        )}
-      />
+      {/* Welcome hero — the login's navy identity carried into the product */}
+      <motion.div
+        initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+        className="relative isolate overflow-hidden rounded-3xl bg-gradient-to-br from-[#0b2350] via-[#0a1f44] to-[#07152e] p-6 text-white sm:p-8"
+      >
+        <div aria-hidden className="pointer-events-none absolute -right-20 -top-24 h-72 w-72 rounded-full bg-brand-500/25 blur-3xl" />
+        <div aria-hidden className="pointer-events-none absolute -bottom-28 -left-16 h-80 w-80 rounded-full bg-brand-400/15 blur-3xl" />
+        <div aria-hidden className="login-noise absolute inset-0" />
+        <div className="relative z-10 flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-brand-300/90">
+              {new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}
+            </p>
+            <h1 className="mt-1 text-2xl font-extrabold tracking-tight sm:text-3xl">
+              {(() => { const h = new Date().getHours(); return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'; })()}, {user?.name?.split(' ')[0]} 👋
+            </h1>
+            <p className="mt-1.5 text-sm text-white/65">
+              {isCEO ? 'Here is what is happening across your marketing operations.' : 'Track your content and stay on top of approvals.'}
+            </p>
+          </div>
+          {isAdmin && orgs.length > 0 && (
+            <select aria-label="Organization"
+              className="h-10 w-auto cursor-pointer rounded-xl border border-white/15 bg-white/10 px-3 text-sm font-semibold text-white outline-none backdrop-blur transition hover:bg-white/15 focus:ring-4 focus:ring-brand-500/30 [&>option]:text-slate-800"
+              value={orgId} onChange={(e) => setOrgId(e.target.value)}>
+              {orgs.map((o) => <option key={o._id} value={o._id}>{o.name}</option>)}
+            </select>
+          )}
+        </div>
+      </motion.div>
 
       {/* Yearly goal progress (only shows when a goal is set) */}
       {orgId && <GoalCard orgId={orgId} />}
 
+      {/* Tago's AI read-out of the live numbers */}
+      <AiInsights orgId={orgId} />
+
       {/* Social analytics */}
       <SocialCards social={statsData?.social} orgId={orgId} />
+
+      {/* Activity heatmap — role-aware view of a full year */}
+      <ActivityHeatmapCard organizationId={isAdmin ? orgId : ownOrgId} />
 
       {/* Role KPIs */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">

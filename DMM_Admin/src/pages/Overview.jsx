@@ -7,8 +7,9 @@ import {
 import { motion } from 'framer-motion';
 import { organizationApi, userApi, activityApi, analyticsApi } from '../api/endpoints.js';
 import { useAuthStore } from '../store/authStore.js';
-import PageHeader from '../components/layout/PageHeader.jsx';
 import { Card, Avatar, Skeleton, EmptyState } from '../components/ui/primitives.jsx';
+import CountUp from '../components/CountUp.jsx';
+import ActivityHeatmapCard from '../components/ActivityHeatmapCard.jsx';
 import { timeAgo, formatNumber } from '../lib/utils.js';
 
 const ACTIVITY_LABEL = {
@@ -32,6 +33,7 @@ export default function Overview() {
   const counts = users.reduce((acc, u) => { acc[u.role] = (acc[u.role] || 0) + 1; return acc; }, {});
   const totalPosts = orgs.reduce((a, o) => a + (o.postCount || 0), 0);
   const activity = activityData?.logs || [];
+  const showHeatmap = !!user?.isSuperAdmin;
 
   const superAdmins = users.filter((u) => u.isSuperAdmin).length;
   const cards = [
@@ -45,20 +47,39 @@ export default function Overview() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title={`Welcome, ${user?.name?.split(' ')[0]} 👋`} subtitle="Platform-wide administration overview." />
+      {/* Welcome hero — the login's navy identity carried into the console */}
+      <motion.div
+        initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+        className="relative isolate overflow-hidden rounded-3xl bg-gradient-to-br from-[#0b2350] via-[#0a1f44] to-[#07152e] p-6 text-white sm:p-8"
+      >
+        <div aria-hidden className="pointer-events-none absolute -right-20 -top-24 h-72 w-72 rounded-full bg-brand-500/25 blur-3xl" />
+        <div aria-hidden className="pointer-events-none absolute -bottom-28 -left-16 h-80 w-80 rounded-full bg-brand-400/15 blur-3xl" />
+        <div aria-hidden className="login-noise absolute inset-0" />
+        <div className="relative z-10">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-brand-300/90">
+            {new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}
+          </p>
+          <h1 className="mt-1 text-2xl font-extrabold tracking-tight sm:text-3xl">
+            {(() => { const h = new Date().getHours(); return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'; })()}, {user?.name?.split(' ')[0]} 👋
+          </h1>
+          <p className="mt-1.5 text-sm text-white/65">Platform-wide administration overview.</p>
+        </div>
+      </motion.div>
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-6">
         {lo ? Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-24" />)
           : cards.map((c, i) => (
             <motion.div key={c.label} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }} className="card p-4">
               <div className={`mb-2 w-fit rounded-lg p-2 ${c.tone}`}><c.icon className="h-4 w-4" /></div>
-              <p className="text-2xl font-extrabold text-slate-800 dark:text-white">{formatNumber(c.value)}</p>
+              <p className="text-2xl font-extrabold tabular-nums text-slate-800 dark:text-white"><CountUp value={c.value} /></p>
               <p className="text-xs text-slate-400">{c.label}</p>
             </motion.div>
           ))}
       </div>
 
       <LinkedInPulse onOpen={() => navigate('/analytics')} />
+
+      {showHeatmap && <ActivityHeatmapCard organizations={orgs} />}
 
       <div className="grid gap-4 lg:grid-cols-3">
         {/* Organizations summary */}

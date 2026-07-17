@@ -83,6 +83,40 @@ const latestTs = (metricObj) => {
   return typeof last?.value === 'number' ? last.value : undefined;
 };
 
+const latestValue = (metricObj) => {
+  const vals = metricObj?.values || [];
+  if (!vals.length) return undefined;
+  return vals[vals.length - 1]?.value;
+};
+
+const toNumber = (value) => {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : undefined;
+};
+
+const sumObjectValues = (value) => {
+  if (!value || typeof value !== 'object') return undefined;
+  const total = Object.values(value).reduce((sum, entry) => {
+    const n = Number(entry);
+    return Number.isFinite(n) ? sum + n : sum;
+  }, 0);
+  return total > 0 ? total : undefined;
+};
+
+const pickObjectMetric = (value, keys) => {
+  if (!value || typeof value !== 'object') return undefined;
+  for (const key of keys) {
+    const exact = toNumber(value[key]);
+    if (exact != null) return exact;
+    const alt = Object.entries(value).find(([name]) => String(name).toLowerCase() === String(key).toLowerCase());
+    if (alt) {
+      const n = toNumber(alt[1]);
+      if (n != null) return n;
+    }
+  }
+  return undefined;
+};
+
 // ---------------------------------------------------------------------------
 // Discovery — list all Facebook Pages visible to the token and their linked
 // Instagram business accounts. This is how we find the 7 brands automatically.
@@ -142,6 +176,7 @@ export const REQUIRED_SCOPES = [
   'instagram_manage_insights',
   'pages_show_list',
   'pages_read_engagement',
+  'pages_read_user_content',
   'business_management',
 ];
 
@@ -182,6 +217,30 @@ export const getInstagramMetrics = async (igId, pageToken) => {
     try { const v = await totalValue('views'); if (v != null) out.views = v; } catch { /* skip */ }
     try { const v = await totalValue('total_interactions'); if (v != null) out.interactions = v; } catch { /* skip */ }
   }
+
+  const IG_TOTAL_VALUE_MAP = [
+    {
+      metric: 'profile_views',
+      field: 'pageViews',
+    },
+    {
+      metric: 'website_clicks',
+      field: 'linkClicks',
+    },
+    {
+      metric: 'impressions',
+      field: 'impressions',
+    },
+  ];
+
+  for (const { metric, field } of IG_TOTAL_VALUE_MAP) {
+    try {
+      const value = await totalValue(metric);
+      if (value != null) out[field] = value;
+    } catch { /* skip */ }
+  }
+
+  if (out.impressions == null && out.views != null) out.impressions = out.views;
 
   return out;
 };
@@ -228,5 +287,191 @@ export const getFacebookMetrics = async (pageId, pageTokenIn) => {
     } catch { /* skip */ }
   }
 
+  const EXTRA_METRICS = [
+    {
+      metric: 'page_impressions',
+      assign: (value) => {
+        const n = toNumber(value);
+        if (n != null) out.views = n;
+      },
+    },
+    {
+      metric: 'page_impressions_unique',
+      assign: (value) => {
+        const n = toNumber(value);
+        if (n != null) out.reach = n;
+      },
+    },
+    {
+      metric: 'page_consumptions_by_consumption_type',
+      assign: (value) => {
+        const clicks = pickObjectMetric(value, ['link clicks', 'link_clicks']) ?? sumObjectValues(value);
+        if (clicks != null) out.linkClicks = clicks;
+      },
+    },
+  ];
+
+  for (const { metric, assign } of EXTRA_METRICS) {
+    try {
+      const r = await call(`${pageId}/insights`, { metric, period: 'days_28' }, pageToken);
+      const value = latestValue((r.data || [])[0]);
+      if (value != null) assign(value);
+    } catch { /* skip */ }
+  }
+
+  const needsPostFallback = out.reach == null || out.views == null || out.linkClicks == null || out.interactions == null;
+  if (!needsPostFallback) return out;
+
+  try {
+    // Some pages have sparse recent activity; scan a larger recent window so we
+    // can still derive reach/views/clicks from post insights when page-level
+    // insights are unavailable.
+    const since = new Date(Date.now() - 120 * 86400000).toISOString();
+    const postList = [];
+    let posts = await call(`${pageId}/posts`, { fields: 'id', limit: 25, since }, pageToken);
+    for (;;) {
+      for (const row of posts.data || []) {
+        if (row?.id) postList.push(row);
+        if (postList.length >= 75) break;
+      }
+      if (postList.length >= 75 || !posts.paging?.next) break;
+      posts = await fetchNext(posts.paging.next);
+    }
+    if (!postList.length) return out;
+
+    const totals = { views: 0, reach: 0, linkClicks: 0, interactions: 0 };
+    for (const post of postList) {
+      try {
+        const metrics = await call(
+          `${post.id}/insights`,
+          { metric: 'post_impressions,post_impressions_unique,post_clicks,post_clicks_by_type,post_engaged_users' },
+          pageToken
+        );
+        for (const metric of metrics.data || []) {
+          const value = latestValue(metric);
+          if (metric.name === 'post_clicks_by_type') {
+            const clicks = pickObjectMetric(value, ['link clicks', 'link_clicks']);
+            if (clicks != null) totals.linkClicks += clicks;
+            continue;
+          }
+          const n = toNumber(value);
+          if (n == null) continue;
+          if (metric.name === 'post_impressions') totals.views += n;
+          if (metric.name === 'post_impressions_unique') totals.reach += n;
+          if (metric.name === 'post_clicks') totals.linkClicks += n;
+          if (metric.name === 'post_engaged_users') totals.interactions += n;
+        }
+      } catch { /* skip one post */ }
+    }
+
+    if (out.views == null && totals.views > 0) out.views = totals.views;
+    if (out.reach == null && totals.reach > 0) out.reach = totals.reach;
+    if (out.linkClicks == null && totals.linkClicks > 0) out.linkClicks = totals.linkClicks;
+    if (out.interactions == null && totals.interactions > 0) out.interactions = totals.interactions;
+  } catch { /* skip fallback */ }
+
+  // Keep cards useful even when Meta withholds one of the two exposure metrics.
+  if (out.views == null && out.reach != null) out.views = out.reach;
+  if (out.reach == null && out.views != null) out.reach = out.views;
+
   return out;
+};
+
+const normalizeAdAccountId = (id = '') => String(id).replace(/^act_/i, '').trim();
+
+export const listAdAccounts = async () => {
+  const out = [];
+  const seen = new Set();
+
+  const pushAccount = (account) => {
+    const accountId = normalizeAdAccountId(account.account_id || account.id);
+    if (!accountId || seen.has(accountId)) return;
+    seen.add(accountId);
+    out.push({
+      id: `act_${accountId}`,
+      accountId,
+      name: account.name || `act_${accountId}`,
+      currency: account.currency || '',
+      accountStatus: account.account_status,
+    });
+  };
+
+  const collectPagedAccounts = async (path) => {
+    let data = await call(path, {
+      fields: 'id,account_id,name,account_status,currency',
+      limit: 100,
+    });
+    for (;;) {
+      for (const account of data.data || []) pushAccount(account);
+      if (!data.paging?.next) break;
+      data = await fetchNext(data.paging.next);
+    }
+  };
+
+  // Directly assigned ad accounts on the identity.
+  try { await collectPagedAccounts('me/adaccounts'); } catch { /* continue with business fallbacks */ }
+
+  // Many system-user tokens don't expose accounts on /me/adaccounts even when
+  // ads_read is granted; accounts are visible via business-owned/client lists.
+  try {
+    let businesses = await call('me/businesses', { fields: 'id,name', limit: 100 });
+    for (;;) {
+      for (const biz of businesses.data || []) {
+        if (!biz?.id) continue;
+        try { await collectPagedAccounts(`${biz.id}/owned_ad_accounts`); } catch { /* ignore one business */ }
+        try { await collectPagedAccounts(`${biz.id}/client_ad_accounts`); } catch { /* ignore one business */ }
+      }
+      if (!businesses.paging?.next) break;
+      businesses = await fetchNext(businesses.paging.next);
+    }
+  } catch { /* no business visibility */ }
+
+  return out;
+};
+
+const parseNum = (v) => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+};
+
+export const getAdInsights = async (adAccountId, { since, until }) => {
+  const norm = normalizeAdAccountId(adAccountId);
+  if (!norm) return [];
+
+  const range = {
+    since: String(since).slice(0, 10),
+    until: String(until).slice(0, 10),
+  };
+
+  const rows = [];
+  let data = await call(`act_${norm}/insights`, {
+    fields: 'account_id,account_name,date_start,date_stop,impressions,reach,clicks,spend,cpc,cpm,ctr',
+    level: 'account',
+    time_increment: 1,
+    time_range: JSON.stringify(range),
+    limit: 100,
+  });
+
+  for (;;) {
+    for (const r of data.data || []) {
+      rows.push({
+        accountId: normalizeAdAccountId(r.account_id || norm),
+        accountName: r.account_name || '',
+        dateStart: r.date_start,
+        dateStop: r.date_stop,
+        impressions: parseNum(r.impressions),
+        reach: parseNum(r.reach),
+        clicks: parseNum(r.clicks),
+        spend: parseNum(r.spend),
+        cpc: parseNum(r.cpc),
+        cpm: parseNum(r.cpm),
+        ctr: parseNum(r.ctr),
+        raw: r,
+      });
+    }
+    if (!data.paging?.next) break;
+    data = await fetchNext(data.paging.next);
+  }
+
+  return rows;
 };

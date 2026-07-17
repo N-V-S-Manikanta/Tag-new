@@ -48,10 +48,9 @@ export const createBrandAsset = asyncHandler(async (req, res) => {
   res.status(201).json({ success: true, asset });
 });
 
-// @route PUT /api/brand/:id  (ADMIN) — edit metadata (title/category/description)
+// @route PUT /api/brand/:id  (super admin) — edit metadata (title/category/description)
 export const updateBrandAsset = asyncHandler(async (req, res) => {
-  const orgId = requireOrgId(req, res);
-  const asset = await BrandAsset.findOne({ _id: req.params.id, organization: orgId });
+  const asset = await BrandAsset.findById(req.params.id);
   if (!asset) { res.status(404); throw new Error('Item not found'); }
   const { title, category, description } = req.body;
   if (title !== undefined) asset.title = title;
@@ -61,10 +60,9 @@ export const updateBrandAsset = asyncHandler(async (req, res) => {
   res.json({ success: true, asset });
 });
 
-// @route DELETE /api/brand/:id  (ADMIN)
+// @route DELETE /api/brand/:id  (super admin)
 export const deleteBrandAsset = asyncHandler(async (req, res) => {
-  const orgId = requireOrgId(req, res);
-  const asset = await BrandAsset.findOne({ _id: req.params.id, organization: orgId });
+  const asset = await BrandAsset.findById(req.params.id);
   if (!asset) { res.status(404); throw new Error('Item not found'); }
   if (asset.kind === 'file' && asset.publicId) await deleteFile(asset.publicId);
   await asset.deleteOne();

@@ -11,8 +11,8 @@ import { cn, formatDate, formatNumber } from '../lib/utils.js';
 
 // Labels for the fields Meta can write, used until the report payload loads.
 const FALLBACK_LABELS = {
-  followers: 'Total Followers', newFollowers: 'New Followers', reach: 'Reach',
-  views: 'Views', interactions: 'Interactions', visits: 'Visits',
+  followers: 'Total Followers', newFollowers: 'New Followers',
+  interactions: 'Interactions', visits: 'Visits',
 };
 
 const PillConnected = () => (
@@ -83,7 +83,12 @@ export default function MetaSync({ orgId, platform, report, onSynced }) {
           )}
           {platform === 'Facebook' && (
             <p className="mt-0.5 max-w-xl text-[11px] text-slate-400">
-              Meta's API provides followers + interactions for Pages — reach, views and new followers aren't available and can be filled via the weekly Excel import.
+              Facebook metrics now use both Page insights and recent post insights when Meta exposes them. If some fields stay blank, confirm the token also has pages_read_user_content.
+            </p>
+          )}
+          {platform === 'Instagram' && (
+            <p className="mt-0.5 max-w-xl text-[11px] text-slate-400">
+              Instagram sync now attempts impressions, profile views and link clicks in addition to followers, reach, views and interactions when Meta exposes them for the linked account.
             </p>
           )}
         </div>

@@ -7,6 +7,8 @@ import {
   rejectRequest,
   resubmitRequest,
   markPosted,
+  assignRequest,
+  forwardRequest,
   addComment,
   deleteApproval,
 } from '../controllers/approvalController.js';
@@ -22,8 +24,11 @@ router.route('/:id').get(getApproval).delete(deleteApproval);
 
 // ADMIN is the global approver (head of all organizations), so they can
 // approve/reject alongside the per-organization CEO.
-router.put('/:id/approve', authorize(ROLES.CEO, ROLES.ADMIN), approveRequest);
-router.put('/:id/reject', authorize(ROLES.CEO, ROLES.ADMIN), rejectRequest);
+router.put('/:id/approve', authorize(ROLES.ADMIN), approveRequest);
+router.put('/:id/reject', authorize(ROLES.ADMIN), rejectRequest);
+// Hand an approved design to a social-media handler (design → post pipeline).
+router.put('/:id/assign', authorize(ROLES.CEO, ROLES.ADMIN), assignRequest);
+router.put('/:id/forward', authorize(ROLES.ADMIN), forwardRequest);
 router.put('/:id/resubmit', upload.array('images', 10), resubmitRequest);
 router.put('/:id/posted', markPosted);
 

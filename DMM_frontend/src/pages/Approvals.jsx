@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import {
   Plus, Search, Inbox, Images as ImagesIcon, Play, Layers, Clock, RefreshCw,
-  CheckCircle2, Send, ChevronLeft, ChevronRight,
+  CheckCircle2, Send, ChevronLeft, ChevronRight, Palette, UserCheck,
 } from 'lucide-react';
 import { approvalApi } from '../api/endpoints.js';
 import { useAuthStore } from '../store/authStore.js';
@@ -16,6 +16,14 @@ import { cn, formatDate, isVideo } from '../lib/utils.js';
 
 const STATUSES = ['All', 'PENDING', 'RESUBMITTED', 'APPROVED', 'REJECTED', 'POSTED'];
 const PLATFORMS = ['All', 'LinkedIn', 'Instagram', 'YouTube', 'Facebook'];
+
+// The two approval pipelines. POST = ready-to-publish content. DESIGN =
+// creative work that, once approved, is assigned to a platform handler who
+// then raises the linked post request.
+const TYPE_TABS = [
+  { key: 'POST', label: 'Post approvals', icon: Send },
+  { key: 'DESIGN', label: 'Design approvals', icon: Palette },
+];
 
 const STATUS_LABELS = { All: 'All', PENDING: 'Pending', RESUBMITTED: 'Resubmitted', APPROVED: 'Approved', REJECTED: 'Rejected', POSTED: 'Posted' };
 
@@ -40,14 +48,23 @@ const EMPTY_COPY = {
 export default function Approvals() {
   const navigate = useNavigate();
   const { user } = useAuthStore();
+  const isSuperAdmin = !!user?.isSuperAdmin;
   const [searchParams] = useSearchParams();
-  // Allow the dashboard cards to deep-link into a pre-filtered view (?status=PENDING).
+  // Allow the dashboard cards to deep-link into a pre-filtered view (?status=PENDING),
+  // and design detail pages to open the composer prefilled (?compose=post&design=<id>).
   const initialStatus = STATUSES.includes(searchParams.get('status')) ? searchParams.get('status') : 'All';
-  const [filters, setFilters] = useState({ search: '', status: initialStatus, platform: 'All', from: '', to: '' });
+  const initialType = searchParams.get('type') === 'DESIGN' ? 'DESIGN' : 'POST';
+  const composeDesign = searchParams.get('design') || '';
+  const [filters, setFilters] = useState({ search: '', status: initialStatus, type: initialType, platform: 'All', from: '', to: '' });
   const [page, setPage] = useState(1);
   const [rows, setRows] = useState(10);
-  const [showCreate, setShowCreate] = useState(false);
+  const [showCreate, setShowCreate] = useState(!!composeDesign || searchParams.get('compose') === 'post');
   const hasDateFilter = filters.from || filters.to;
+
+  const closeCreate = () => {
+    setShowCreate(false);
+    if (composeDesign) navigate('/approvals', { replace: true });
+  };
 
   // Any filter/tab change restarts pagination from the first page.
   const applyFilters = (patch) => { setFilters((f) => ({ ...f, ...patch })); setPage(1); };
@@ -62,6 +79,7 @@ export default function Approvals() {
   });
   const requests = data?.requests || [];
   const counts = data?.counts || {};
+  const typeCounts = data?.typeCounts || {};
   const total = data?.total ?? 0;
   const pages = data?.pages || 1;
   const viewFrom = total === 0 ? 0 : (page - 1) * rows + 1;
@@ -70,10 +88,31 @@ export default function Approvals() {
   return (
     <div>
       <PageHeader
-        title={['ADMIN', 'CEO'].includes(user?.role) ? 'Approval Panel' : 'My Approval Requests'}
-        subtitle={['ADMIN', 'CEO'].includes(user?.role) ? 'Review, approve or request changes to content.' : 'Create and track your content approvals.'}
+        title={isSuperAdmin ? 'Approval Panel' : 'My Approval Requests'}
+        subtitle={isSuperAdmin ? 'Review, approve or request changes to content.' : 'Create and track your content approvals.'}
         actions={<Button onClick={() => setShowCreate(true)}><Plus className="h-4 w-4" /> New Request</Button>}
       />
+
+      {/* Pipeline switch: post approvals vs design approvals */}
+      <div className="mb-5 inline-flex rounded-2xl border border-slate-200 bg-white p-1.5 shadow-soft dark:border-slate-800 dark:bg-slate-900">
+        {TYPE_TABS.map((t) => (
+          <button
+            key={t.key} type="button"
+            onClick={() => applyFilters({ type: t.key, status: 'All' })}
+            className={cn(
+              'flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition',
+              filters.type === t.key
+                ? 'bg-gradient-to-b from-brand-500 to-brand-600 text-white shadow-soft'
+                : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+            )}
+          >
+            <t.icon className="h-4 w-4" /> {t.label}
+            <span className={cn('rounded-full px-2 py-0.5 text-xs font-bold', filters.type === t.key ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500 dark:bg-slate-800')}>
+              {typeCounts[t.key] ?? 0}
+            </span>
+          </button>
+        ))}
+      </div>
 
       {/* Stat tiles — click to jump to that status tab */}
       <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
@@ -171,6 +210,11 @@ export default function Approvals() {
                       <div className="min-w-0">
                         <p className="max-w-[220px] truncate font-semibold text-slate-800 dark:text-white">{r.title}</p>
                         <p className="text-xs text-slate-400">{r.organization?.name || '—'}</p>
+                        {r.type === 'DESIGN' && r.assignedTo && (
+                          <p className="mt-0.5 flex items-center gap-1 text-[11px] font-medium text-violet-500">
+                            <UserCheck className="h-3 w-3" /> {r.assignedTo?.name}
+                          </p>
+                        )}
                       </div>
                     </div>
                   </td>
@@ -222,7 +266,14 @@ export default function Approvals() {
         </div>
       </Card>
 
-      {showCreate && <CreateApprovalModal onClose={() => setShowCreate(false)} onSaved={() => { setShowCreate(false); refetch(); }} />}
+      {showCreate && (
+        <CreateApprovalModal
+          defaultType={composeDesign ? 'POST' : filters.type}
+          sourceDesignId={composeDesign}
+          onClose={closeCreate}
+          onSaved={() => { closeCreate(); applyFilters({ type: composeDesign ? 'POST' : filters.type, status: 'All' }); refetch(); }}
+        />
+      )}
     </div>
   );
 }

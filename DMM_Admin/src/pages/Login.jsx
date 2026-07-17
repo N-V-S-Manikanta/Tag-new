@@ -1,14 +1,15 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion, MotionConfig } from 'framer-motion';
+import { AnimatePresence, animate, motion, MotionConfig, useReducedMotion } from 'framer-motion';
 import toast from 'react-hot-toast';
 import {
   Mail, Lock, ArrowRight, ShieldCheck, ClipboardCheck, Target, Check, Clock3,
-  Image as ImageIcon, Megaphone,
+  Image as ImageIcon, Megaphone, Clapperboard, Calendar,
 } from 'lucide-react';
 import { useAuthStore, NotAdminError } from '../store/authStore.js';
 import { Button } from '../components/ui/Button.jsx';
 import { Input } from '../components/ui/primitives.jsx';
+import { cn } from '../lib/utils.js';
 
 // Entrance choreography — everything settles within ~3s; after that only the
 // aurora and the card border keep moving (pure CSS, disabled by the global
@@ -35,22 +36,61 @@ const timeGreeting = () => {
   return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
 };
 
-// Approval status that flips from "In review" to "Approved" once, ~2.5s in —
-// a tiny live demo of what this console governs.
-function StatusFlip() {
+// The approval queue processing itself — items keep arriving and getting
+// approved, on a loop. Static (first item, approved) under reduced motion.
+const TICKER_ITEMS = [
+  { icon: ImageIcon, title: 'Tech fest poster', meta: 'NCET · Instagram' },
+  { icon: Clapperboard, title: 'Campus tour reel', meta: 'NDC · YouTube' },
+  { icon: Megaphone, title: 'Admission banner', meta: 'NSAM · Facebook' },
+];
+function ApprovalTicker({ items }) {
+  const reduce = useReducedMotion();
+  const [idx, setIdx] = useState(0);
+  const [approved, setApproved] = useState(reduce);
+  useEffect(() => {
+    if (reduce) { setApproved(true); return; }
+    setApproved(false);
+    const t1 = setTimeout(() => setApproved(true), 2100);
+    const t2 = setTimeout(() => setIdx((i) => (i + 1) % items.length), 4400);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, [idx, reduce, items.length]);
+  const { icon: Icon, title, meta } = items[idx];
   return (
-    <span className="relative ml-auto inline-flex shrink-0">
-      <motion.span initial={{ opacity: 1 }} animate={{ opacity: 0 }} transition={{ delay: 2.4, duration: 0.25 }}
-        className="inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-amber-400/15 px-2.5 py-1 text-[11px] font-semibold text-amber-300">
-        <Clock3 className="h-3 w-3" /> In review
-      </motion.span>
-      <motion.span initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }}
-        transition={{ delay: 2.55, type: 'spring', stiffness: 320, damping: 18 }}
-        className="absolute right-0 inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-emerald-400/15 px-2.5 py-1 text-[11px] font-semibold text-emerald-300">
-        <Check className="h-3 w-3" /> Approved
-      </motion.span>
-    </span>
+    <AnimatePresence mode="wait">
+      <motion.div key={idx} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
+        transition={{ duration: 0.35, ease: EASE }} className="flex w-full items-center gap-3">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-500/20">
+          <Icon className="h-4 w-4 text-brand-300" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <p className="truncate text-xs font-semibold text-white">{title}</p>
+          <p className="text-[11px] text-white/55">{meta}</p>
+        </span>
+        <span className="relative ml-auto inline-flex shrink-0">
+          <span className={cn('inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-amber-400/15 px-2.5 py-1 text-[11px] font-semibold text-amber-300 transition-opacity duration-300', approved && 'opacity-0')}>
+            <Clock3 className="h-3 w-3" /> In review
+          </span>
+          <motion.span initial={false} animate={approved ? { opacity: 1, scale: 1 } : { opacity: 0, scale: 0.8 }}
+            transition={{ type: 'spring', stiffness: 320, damping: 18 }}
+            className="absolute right-0 inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-emerald-400/15 px-2.5 py-1 text-[11px] font-semibold text-emerald-300">
+            <Check className="h-3 w-3" /> Approved
+          </motion.span>
+        </span>
+      </motion.div>
+    </AnimatePresence>
   );
+}
+
+// Goal percentage that counts up once, then rests (instant under reduced motion).
+function GoalPercent({ to = 72 }) {
+  const [n, setN] = useState(0);
+  const reduce = useReducedMotion();
+  useEffect(() => {
+    if (reduce) { setN(to); return; }
+    const c = animate(0, to, { duration: 1.2, delay: 1.5, ease: 'easeOut', onUpdate: (v) => setN(Math.round(v)) });
+    return () => c.stop();
+  }, [to, reduce]);
+  return <span className="text-[11px] font-bold tabular-nums text-brand-300">{n}%</span>;
 }
 
 export default function Login() {
@@ -87,7 +127,7 @@ export default function Login() {
           <motion.div {...rise(0.15)} className="relative z-10 flex items-start justify-between">
             <div>
               <img src="/logo-light.png" alt="t@g" className="h-12 w-auto" />
-              <p className="mt-2.5 text-[10px] font-bold uppercase tracking-[0.26em] text-white/60">Campus Marketing Hub — Admin</p>
+              <p className="mt-2.5 text-[10px] font-bold uppercase tracking-[0.26em] text-white/60">Digital Pulse of NGI — Admin</p>
             </div>
             <span className="hidden items-center gap-2 rounded-full border border-white/15 bg-white/[0.06] px-3.5 py-1.5 text-xs font-medium text-white/75 backdrop-blur-md xl:inline-flex">
               <ShieldCheck className="h-3.5 w-3.5 text-brand-300" />
@@ -117,23 +157,14 @@ export default function Login() {
                   <span className="rounded-full border border-white/10 bg-white/[0.06] px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-white/55">Preview</span>
                 </div>
                 <div className="mt-4 space-y-3">
-                  <div className="flex items-center gap-3">
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-500/20">
-                      <ImageIcon className="h-4 w-4 text-brand-300" />
-                    </span>
-                    <span className="min-w-0">
-                      <p className="truncate text-xs font-semibold text-white">Tech fest poster</p>
-                      <p className="text-[11px] text-white/55">NCET · Instagram</p>
-                    </span>
-                    <StatusFlip />
-                  </div>
+                  <ApprovalTicker items={TICKER_ITEMS} />
                   <div className="flex items-center gap-3">
                     <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-sky-400/15">
-                      <Megaphone className="h-4 w-4 text-sky-300" />
+                      <Calendar className="h-4 w-4 text-sky-300" />
                     </span>
                     <span className="min-w-0">
-                      <p className="truncate text-xs font-semibold text-white">Admission banner</p>
-                      <p className="text-[11px] text-white/55">NSAM · Facebook</p>
+                      <p className="truncate text-xs font-semibold text-white">Convocation live</p>
+                      <p className="text-[11px] text-white/55">NCMS · YouTube</p>
                     </span>
                     <span className="ml-auto inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-sky-400/15 px-2.5 py-1 text-[11px] font-semibold text-sky-300">
                       <Clock3 className="h-3 w-3" /> Scheduled
@@ -142,18 +173,21 @@ export default function Login() {
                 </div>
               </motion.div>
 
-              <motion.div {...rise(0.6)} className="absolute -bottom-6 -right-2 w-56 rounded-2xl border border-white/10 bg-[#0d1e3d]/90 p-4 shadow-[0_16px_40px_-16px_rgba(0,0,0,0.7)] backdrop-blur-xl sm:-right-4">
-                <p className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-white/55">
-                  <Target className="h-3 w-3 text-brand-300" /> Growth goal
-                </p>
-                <p className="mt-1.5 text-xs font-semibold text-white">+5k followers · this term</p>
-                <div className="mt-2 flex items-center gap-2">
-                  <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/10">
-                    <motion.div initial={{ scaleX: 0 }} animate={{ scaleX: 0.72 }}
-                      transition={{ delay: 1.5, duration: 1, ease: 'easeOut' }}
-                      className="h-full w-full origin-left rounded-full bg-gradient-to-r from-brand-500 to-brand-300" />
+              <motion.div {...rise(0.6)} className="absolute -bottom-6 -right-2 sm:-right-4">
+                <div className="login-float w-56 rounded-2xl border border-white/10 bg-[#0d1e3d]/90 p-4 shadow-[0_16px_40px_-16px_rgba(0,0,0,0.7)] backdrop-blur-xl">
+                  <p className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-white/55">
+                    <Target className="h-3 w-3 text-brand-300" /> Growth goal
+                  </p>
+                  <p className="mt-1.5 text-xs font-semibold text-white">+5k followers · this term</p>
+                  <div className="mt-2 flex items-center gap-2">
+                    <div className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-white/10">
+                      <motion.div initial={{ scaleX: 0 }} animate={{ scaleX: 0.72 }}
+                        transition={{ delay: 1.5, duration: 1, ease: 'easeOut' }}
+                        className="h-full w-full origin-left rounded-full bg-gradient-to-r from-brand-500 to-brand-300" />
+                      <span aria-hidden className="login-progress-shine pointer-events-none absolute inset-y-0 left-0 w-1/3 bg-gradient-to-r from-transparent via-white/30 to-transparent" />
+                    </div>
+                    <GoalPercent to={72} />
                   </div>
-                  <span className="text-[11px] font-bold tabular-nums text-brand-300">72%</span>
                 </div>
               </motion.div>
             </div>
@@ -179,7 +213,7 @@ export default function Login() {
             <div className="mb-8 flex flex-col items-center gap-2.5 lg:hidden">
               <img src="/logo-trim.png" alt="t@g" className="h-12 w-auto dark:hidden" />
               <img src="/logo-light.png" alt="t@g" className="hidden h-12 w-auto dark:block" />
-              <p className="text-[10px] font-bold uppercase tracking-[0.26em] text-slate-500 dark:text-slate-400">Campus Marketing Hub — Admin</p>
+              <p className="text-[10px] font-bold uppercase tracking-[0.26em] text-slate-500 dark:text-slate-400">Digital Pulse of NGI — Admin</p>
             </div>
 
             {/* Glass card with the living conic border (.login-card::before) */}

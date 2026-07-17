@@ -10,6 +10,7 @@ const sanitize = (user) => ({
   name: user.name,
   email: user.email,
   role: user.role,
+  userType: user.userType || null,
   isSuperAdmin: !!user.isSuperAdmin,
   avatar: user.avatar,
   jobTitle: user.jobTitle,

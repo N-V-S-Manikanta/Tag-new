@@ -10,9 +10,11 @@ export const errorHandler = (err, req, res, next) => {
 
   if (err.name === 'MulterError') {
     statusCode = 400;
-    if (err.code === 'LIMIT_FILE_SIZE') {
-      message = 'File too large. Maximum upload size is 100 MB.';
-    }
+    // There is no configured file-size cap, so LIMIT_FILE_SIZE should not fire.
+    // If an upload still fails at a fixed threshold (~1 MB), the block is almost
+    // certainly a reverse proxy (nginx client_max_body_size) in front of Node,
+    // not this app.
+    message = `Upload error: ${err.message}`;
   }
 
   // Mongoose bad ObjectId

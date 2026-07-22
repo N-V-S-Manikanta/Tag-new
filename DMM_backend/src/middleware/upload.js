@@ -68,7 +68,12 @@ const fileFilter = (req, file, cb) => {
 const upload = multer({
   storage,
   fileFilter,
-  limits: { fileSize: 100 * 1024 * 1024 }, // 100 MB (videos are larger than images)
+  // No file-size cap — templates, assets, brand files, avatars and videos may be
+  // any size. The only practical ceiling is server RAM, because files are buffered
+  // in memory before being handed to the storage driver. If you routinely upload
+  // very large videos (multi-GB), switch memoryStorage → diskStorage streaming in
+  // this file so files never fully load into memory.
+  limits: { fileSize: Infinity },
 });
 
 export default upload;

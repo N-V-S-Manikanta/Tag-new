@@ -57,8 +57,12 @@ app.use(
     credentials: true,
   })
 );
-app.use(express.json({ limit: '5mb' }));
-app.use(express.urlencoded({ extended: true }));
+// Generous body limits for JSON/form payloads. NOTE: file uploads do NOT flow
+// through these — they are multipart/form-data handled by multer (see
+// middleware/upload.js), which has no size cap. These limits only affect
+// regular JSON/form request bodies (users, goals, plans, AI content, etc.).
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 if (process.env.NODE_ENV !== 'production') app.use(morgan('dev'));
 
 // Serve locally-stored uploads from the configured storage root (local `uploads`

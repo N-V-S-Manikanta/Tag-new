@@ -67,8 +67,13 @@ const call = async (path, params = {}, tok) => {
 // carries the token + cursor).
 const fetchNext = async (nextUrl) => {
   const u = new URL(nextUrl);
-  const proof = appSecretProof(token());
-  if (proof && !u.searchParams.has('appsecret_proof')) u.searchParams.set('appsecret_proof', proof);
+  // The cursor URL carries whichever access_token the original call used — often
+  // a Page Access Token, not the system token. Compute the app-secret proof for
+  // THAT token (overwriting any stale one), or Meta rejects paginated page/IG
+  // calls with "Invalid appsecret_proof".
+  const tokInUrl = u.searchParams.get('access_token') || token();
+  const proof = appSecretProof(tokInUrl);
+  if (proof) u.searchParams.set('appsecret_proof', proof);
   const res = await fetch(u);
   const data = await res.json().catch(() => ({}));
   if (data.error) throw Object.assign(new Error(data.error.message), { metaCode: data.error.code });
@@ -375,6 +380,108 @@ export const getFacebookMetrics = async (pageId, pageTokenIn) => {
   if (out.reach == null && out.views != null) out.reach = out.views;
 
   return out;
+};
+
+// ---------------------------------------------------------------------------
+// Per-post history — the Instagram/Facebook equivalent of LinkedIn's post table.
+// Returns normalized post objects (permalink + engagement) for the SocialPost
+// store. Insights are best-effort: Meta deprecates post metrics often, so a
+// failing insight is skipped and the node-field counts (likes/comments/shares)
+// are kept.
+// ---------------------------------------------------------------------------
+export const getInstagramPosts = async (igId, pageToken, { limit = 60, sinceDays = 365 } = {}) => {
+  if (!pageToken) throw new Error('A page access token is required for Instagram posts');
+  const cutoff = Date.now() - sinceDays * 86400000;
+  const media = [];
+  let data = await call(`${igId}/media`, {
+    fields: 'id,permalink,caption,media_type,media_product_type,thumbnail_url,media_url,timestamp,like_count,comments_count',
+    limit: 50,
+  }, pageToken);
+  outer: for (;;) {
+    for (const m of data.data || []) {
+      if (m.timestamp && new Date(m.timestamp).getTime() < cutoff) break outer;
+      media.push(m);
+      if (media.length >= limit) break outer;
+    }
+    if (!data.paging?.next) break;
+    data = await fetchNext(data.paging.next);
+  }
+
+  const posts = [];
+  for (const m of media) {
+    const post = {
+      postId: m.id,
+      url: m.permalink || '',
+      caption: m.caption || '',
+      mediaType: m.media_product_type === 'REELS' ? 'REEL' : (m.media_type || ''),
+      thumbnail: m.thumbnail_url || m.media_url || '',
+      publishedAt: m.timestamp ? new Date(m.timestamp) : undefined,
+      likes: toNumber(m.like_count) || 0,
+      comments: toNumber(m.comments_count) || 0,
+      reach: 0, saved: 0, shares: 0, views: 0, impressions: 0,
+    };
+    try {
+      const r = await call(`${m.id}/insights`, { metric: 'reach,saved,shares' }, pageToken);
+      for (const x of r.data || []) {
+        const v = x.values?.[0]?.value;
+        if (typeof v === 'number') { if (x.name === 'reach') post.reach = v; else if (x.name === 'saved') post.saved = v; else if (x.name === 'shares') post.shares = v; }
+      }
+    } catch { /* insights unavailable for this media */ }
+    try {
+      const r = await call(`${m.id}/insights`, { metric: 'views', metric_type: 'total_value' }, pageToken);
+      const v = r.data?.[0]?.total_value?.value;
+      if (typeof v === 'number') post.views = v;
+    } catch { /* skip */ }
+    // Use views as the impressions proxy, then reach, so the column is never blank.
+    post.impressions = post.views || post.reach || 0;
+    posts.push(post);
+  }
+  return posts;
+};
+
+export const getFacebookPosts = async (pageId, pageTokenIn, { limit = 50, sinceDays = 365 } = {}) => {
+  const pageToken = pageTokenIn || (await getPageToken(pageId));
+  const cutoff = Date.now() - sinceDays * 86400000;
+  const raw = [];
+  let data = await call(`${pageId}/posts`, {
+    fields: 'id,permalink_url,message,created_time,full_picture,shares,reactions.summary(true).limit(0),comments.summary(true).limit(0)',
+    limit: 25,
+  }, pageToken);
+  outer: for (;;) {
+    for (const p of data.data || []) {
+      if (p.created_time && new Date(p.created_time).getTime() < cutoff) break outer;
+      raw.push(p);
+      if (raw.length >= limit) break outer;
+    }
+    if (!data.paging?.next) break;
+    data = await fetchNext(data.paging.next);
+  }
+
+  const posts = [];
+  for (const p of raw) {
+    const post = {
+      postId: p.id,
+      url: p.permalink_url || '',
+      caption: p.message || '',
+      mediaType: 'post',
+      thumbnail: p.full_picture || '',
+      publishedAt: p.created_time ? new Date(p.created_time) : undefined,
+      likes: toNumber(p.reactions?.summary?.total_count) || 0,
+      comments: toNumber(p.comments?.summary?.total_count) || 0,
+      shares: toNumber(p.shares?.count) || 0,
+      reach: 0, impressions: 0, views: 0, saved: 0,
+    };
+    // Post impressions/reach are frequently deprecated on Pages — best effort.
+    try {
+      const r = await call(`${p.id}/insights`, { metric: 'post_impressions,post_impressions_unique' }, pageToken);
+      for (const x of r.data || []) {
+        const v = x.values?.[0]?.value;
+        if (typeof v === 'number') { if (x.name === 'post_impressions') post.impressions = v; else if (x.name === 'post_impressions_unique') post.reach = v; }
+      }
+    } catch { /* insights unavailable for this page */ }
+    posts.push(post);
+  }
+  return posts;
 };
 
 const normalizeAdAccountId = (id = '') => String(id).replace(/^act_/i, '').trim();

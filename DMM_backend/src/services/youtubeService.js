@@ -113,6 +113,43 @@ export const getYoutubeMetrics = async (channelId) => {
   return out;
 };
 
+// Per-video history — the YouTube equivalent of LinkedIn's post table. Uses the
+// public Data API: views, likes, comments + the watch link. Impressions/reach
+// are NOT available here (they require the YouTube Analytics API with channel-
+// owner OAuth) and are left at 0.
+export const getYoutubePosts = async (channelId, { limit = 50 } = {}) => {
+  const ch = await getChannelById(channelId);
+  if (!ch?.uploads) return [];
+  const ids = [];
+  let pageTok;
+  do {
+    const pl = await call('playlistItems', { part: 'contentDetails', playlistId: ch.uploads, maxResults: 50, pageToken: pageTok });
+    for (const i of pl.items || []) { const vid = i.contentDetails?.videoId; if (vid) ids.push(vid); }
+    pageTok = pl.nextPageToken;
+  } while (pageTok && ids.length < limit);
+
+  const posts = [];
+  for (let i = 0; i < ids.length && posts.length < limit; i += 50) {
+    const batch = ids.slice(i, i + 50);
+    const vids = await call('videos', { part: 'snippet,statistics', id: batch.join(',') });
+    for (const v of vids.items || []) {
+      posts.push({
+        postId: v.id,
+        url: `https://www.youtube.com/watch?v=${v.id}`,
+        caption: v.snippet?.title || '',
+        mediaType: 'video',
+        thumbnail: v.snippet?.thumbnails?.medium?.url || v.snippet?.thumbnails?.default?.url || '',
+        publishedAt: v.snippet?.publishedAt ? new Date(v.snippet.publishedAt) : undefined,
+        views: Number(v.statistics?.viewCount || 0),
+        likes: Number(v.statistics?.likeCount || 0),
+        comments: Number(v.statistics?.commentCount || 0),
+        impressions: 0, reach: 0, shares: 0, saved: 0,
+      });
+    }
+  }
+  return posts.slice(0, limit);
+};
+
 // Cheap validity probe (1 quota unit): look up YouTube's own channel.
 export const probe = async () => {
   const data = await call('channels', { part: 'snippet', id: 'UCBR8-60-B28hp2BmDPdntcQ' });

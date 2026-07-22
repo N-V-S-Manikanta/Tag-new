@@ -10,6 +10,8 @@ import PageHeader from '../components/layout/PageHeader.jsx';
 import OrgPicker from '../components/OrgPicker.jsx';
 import AnalyticsReport from '../components/AnalyticsReport.jsx';
 import LinkedInView from '../components/LinkedInView.jsx';
+import SocialPostsTable from '../components/SocialPostsTable.jsx';
+import SocialPostSummary from '../components/SocialPostSummary.jsx';
 import CompetitorManager from '../components/CompetitorManager.jsx';
 import OrgCompare from '../components/OrgCompare.jsx';
 import AnalyticsOverview from '../components/AnalyticsOverview.jsx';
@@ -162,6 +164,9 @@ function OrgAnalytics({ orgId, initialPlatform }) {
 
       {mode === 'linkedin' && <LinkedInView orgId={orgId} />}
       {mode === 'report' && <AnalyticsReport report={report} isLoading={isLoading} />}
+      {/* Period metrics + per-post table — Instagram / Facebook / YouTube (LinkedIn uses its own view). */}
+      {mode === 'report' && platform !== 'LinkedIn' && <SocialPostSummary orgId={orgId} platform={platform} />}
+      {mode === 'report' && platform !== 'LinkedIn' && <SocialPostsTable orgId={orgId} platform={platform} />}
       {mode === 'enter' && <MetricEntry orgId={orgId} platform={platform} report={report} />}
       {mode === 'competitors' && <CompetitorManager orgId={orgId} platform={platform} />}
     </div>

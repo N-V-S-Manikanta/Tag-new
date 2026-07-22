@@ -7,6 +7,8 @@ import PageHeader from '../components/layout/PageHeader.jsx';
 import AnalyticsReport from '../components/AnalyticsReport.jsx';
 import LinkedInView from '../components/LinkedInView.jsx';
 import ActivityHeatmap from '../components/ActivityHeatmap.jsx';
+import SocialPostsTable from '../components/SocialPostsTable.jsx';
+import SocialPostSummary from '../components/SocialPostSummary.jsx';
 import { cn } from '../lib/utils.js';
 
 const PLATFORMS = [
@@ -62,10 +64,25 @@ export default function SocialAnalytics() {
         <AnalyticsReport report={report} isLoading={isLoading} />
       )}
 
+      {/* Period metrics (7 / 15 / 30 / 90 / 365-day) from the post history */}
+      {orgId && !isLinkedIn && (
+        <div className="mt-5">
+          <SocialPostSummary orgId={orgId} platform={platform} />
+        </div>
+      )}
+
       {/* 365-day activity heatmap for the selected org + platform */}
       {orgId && (
         <div className="mt-5">
           <ActivityHeatmap orgId={orgId} platform={platform} />
+        </div>
+      )}
+
+      {/* Per-post table (Instagram / Facebook / YouTube). LinkedIn has its own
+          post table inside LinkedInView, driven by the Excel export. */}
+      {orgId && !isLinkedIn && (
+        <div className="mt-5">
+          <SocialPostsTable orgId={orgId} platform={platform} />
         </div>
       )}
     </div>

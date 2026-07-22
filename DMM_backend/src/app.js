@@ -33,6 +33,7 @@ import goalRoutes from './routes/goalRoutes.js';
 import planRoutes from './routes/planRoutes.js';
 import aiRoutes from './routes/aiRoutes.js';
 import linkedinRoutes from './routes/linkedinRoutes.js';
+import socialPostRoutes from './routes/socialPostRoutes.js';
 import workAssignmentRoutes from './routes/workAssignmentRoutes.js';
 import brandingRegisterRoutes from './routes/brandingRegisterRoutes.js';
 
@@ -88,6 +89,7 @@ app.use('/api/goals', goalRoutes);
 app.use('/api/plans', planRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/linkedin', linkedinRoutes);
+app.use('/api/social-posts', socialPostRoutes);
 app.use('/api/work-assignments', workAssignmentRoutes);
 app.use('/api/branding-register', brandingRegisterRoutes);
 app.use('/api/competitors', competitorRoutes);

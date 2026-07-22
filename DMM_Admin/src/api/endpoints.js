@@ -73,6 +73,13 @@ export const analyticsApi = {
   template: () => api.get('/analytics/template', { responseType: 'blob' }).then((r) => r.data),
 };
 
+// Per-post history (Instagram / Facebook / YouTube) — pulled from the platform API.
+export const socialPostApi = {
+  list: (platform, organizationId, days) => api.get('/social-posts', { params: { platform, organizationId, days } }).then((r) => r.data),
+  summary: (platform, organizationId, range) => api.get('/social-posts/summary', { params: { platform, organizationId, range } }).then((r) => r.data),
+  sync: (platform, organizationId) => api.post('/social-posts/sync', { platform, organizationId }).then((r) => r.data),
+};
+
 // LinkedIn export hub — upload any LinkedIn analytics download (Content,
 // Visitors, Followers, Competitors); sheets are auto-detected server-side.
 export const linkedinApi = {

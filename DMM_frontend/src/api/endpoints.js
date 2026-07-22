@@ -39,6 +39,14 @@ export const analyticsApi = {
   pulse: () => api.get('/analytics/pulse').then((r) => r.data),
 };
 
+// Per-post history (Instagram / Facebook / YouTube) — the API equivalent of the
+// LinkedIn post table. View for everyone; sync (pull from the platform) for admins.
+export const socialPostApi = {
+  list: (platform, organizationId, days) => api.get('/social-posts', { params: { platform, organizationId, days } }).then((r) => r.data),
+  summary: (platform, organizationId, range) => api.get('/social-posts/summary', { params: { platform, organizationId, range } }).then((r) => r.data),
+  sync: (platform, organizationId) => api.post('/social-posts/sync', { platform, organizationId }).then((r) => r.data),
+};
+
 // LinkedIn export hub — dashboard for everyone; uploads for CEO/Admin.
 export const linkedinApi = {
   dashboard: (organizationId, days) => api.get('/linkedin/dashboard', { params: { organizationId, days } }).then((r) => r.data),

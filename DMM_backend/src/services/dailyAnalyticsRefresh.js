@@ -1,7 +1,9 @@
 import Organization from '../models/Organization.js';
+import SocialPost from '../models/SocialPost.js';
 import { getPageToken, getInstagramMetrics, getFacebookMetrics } from './metaService.js';
 import { getYoutubeMetrics } from './youtubeService.js';
 import { upsertDailySnapshot } from './analyticsSnapshot.js';
+import { syncOrgPlatform, orgSupports, SOCIAL_PLATFORMS } from './socialSync.js';
 
 const DEFAULT_TIME = '02:00';
 
@@ -77,6 +79,20 @@ async function refreshOrganization(org) {
       }
     } catch (err) {
       report.errors.push(`YouTube: ${err.message}`);
+    }
+  }
+
+  // Per-post history (Instagram / Facebook / YouTube). First run for an
+  // org/platform with no stored posts does a full-year backfill; after that it
+  // is a fast recent refresh that catches new posts and updates recent metrics.
+  for (const platform of SOCIAL_PLATFORMS) {
+    if (!orgSupports(org, platform)) continue;
+    try {
+      const existing = await SocialPost.countDocuments({ organization: org._id, platform });
+      const { synced } = await syncOrgPlatform(org, platform, { full: existing === 0 });
+      report.synced.push(`${platform} posts (${synced})`);
+    } catch (err) {
+      report.errors.push(`${platform} posts: ${err.message}`);
     }
   }
 

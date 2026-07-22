@@ -3,6 +3,7 @@ import ExcelJS from 'exceljs';
 import Analytics from '../models/Analytics.js';
 import Organization from '../models/Organization.js';
 import SocialAccount from '../models/SocialAccount.js';
+import SocialPost from '../models/SocialPost.js';
 import Website from '../models/Website.js';
 import { logActivity } from '../utils/logActivity.js';
 import { requireOrgId, resolveViewOrgId } from '../utils/org.js';
@@ -426,13 +427,68 @@ const HEATMAP_DEFAULT_METRIC = {
 const heatmapMetricsFor = (platform) =>
   flatFields(platform).filter((f) => HEATMAP_FLOW_FIELDS.has(f)).map((f) => ({ key: f, label: FIELD_LABELS[f] || f }));
 
+// Instagram/Facebook/YouTube have no reliable year of DAILY account data from
+// the APIs, but their posts DO span the year. So their heatmap is built from the
+// per-post store (SocialPost): each post's metric is attributed to its publish
+// day. This gives a genuine year of activity instead of a few sync-day dots.
+const POST_HEATMAP_METRICS = {
+  Instagram: [['reach', 'Reach'], ['likes', 'Likes'], ['comments', 'Comments'], ['shares', 'Shares'], ['saved', 'Saved']],
+  Facebook: [['likes', 'Likes'], ['comments', 'Comments'], ['shares', 'Shares']],
+  YouTube: [['views', 'Views'], ['likes', 'Likes'], ['comments', 'Comments']],
+};
+const POST_HEATMAP_DEFAULT = { Instagram: 'reach', Facebook: 'likes', YouTube: 'views' };
+
+const buildPostHeatmap = async (orgId, platform, requested, days) => {
+  const available = POST_HEATMAP_METRICS[platform] || [];
+  const metric = available.some(([k]) => k === requested) ? requested : (POST_HEATMAP_DEFAULT[platform] || available[0]?.[0]);
+  const dayMs = 86400000;
+  const now = new Date();
+  const todayMs = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  const startMs = todayMs - (days - 1) * dayMs;
+
+  const rows = await SocialPost.find({ organization: orgId, platform, publishedAt: { $gte: new Date(startMs) } })
+    .select(`publishedAt ${metric}`).lean();
+  const byDay = {};
+  for (const r of rows) {
+    if (!r.publishedAt) continue;
+    const key = new Date(r.publishedAt).toISOString().slice(0, 10);
+    byDay[key] = (byDay[key] || 0) + (Number(r[metric]) || 0);
+  }
+
+  const cells = [];
+  let total = 0, max = 0, activeDays = 0, bestDay = null;
+  for (let i = 0; i < days; i++) {
+    const key = new Date(startMs + i * dayMs).toISOString().slice(0, 10);
+    const value = byDay[key] || 0;
+    cells.push({ date: key, value });
+    total += value;
+    if (value > 0) { activeDays += 1; if (value > max) { max = value; bestDay = { date: key, value }; } }
+  }
+  const label = (available.find(([k]) => k === metric) || [])[1] || metric;
+  return {
+    metric, label, days, from: cells[0]?.date, to: new Date(todayMs).toISOString().slice(0, 10),
+    cells,
+    stats: { total, max, activeDays, average: activeDays ? Math.round(total / activeDays) : 0, bestDay },
+    metrics: available.map(([key, lab]) => ({ key, label: lab })),
+  };
+};
+
 // @route GET /api/analytics/:platform/heatmap?organizationId=&metric=&days=365
 // Daily values of one activity metric across the last ~year, for a GitHub-style
-// contribution heatmap. Days with no data come back as 0.
+// contribution heatmap. Days with no data come back as 0. LinkedIn uses its rich
+// daily Excel data; Instagram/Facebook/YouTube use their per-post history.
 export const getPlatformHeatmap = asyncHandler(async (req, res) => {
   const orgId = resolveViewOrgId(req); // any user may view any org
   const { platform } = req.params;
   if (!PLATFORMS.includes(platform)) { res.status(400); throw new Error('Invalid platform'); }
+
+  // Instagram / Facebook / YouTube → derive from the per-post store.
+  if (platform !== 'LinkedIn') {
+    const days = Math.min(Math.max(Number(req.query.days) || 365, 30), 366);
+    const payload = await buildPostHeatmap(orgId, platform, String(req.query.metric || ''), days);
+    res.json({ success: true, platform, ...payload });
+    return;
+  }
 
   const available = heatmapMetricsFor(platform);
   if (!available.length) { res.status(400); throw new Error('No heatmap metrics for this platform'); }

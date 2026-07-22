@@ -8,6 +8,7 @@ export const authApi = {
 
 export const organizationApi = {
   list: (params) => api.get('/organizations', { params }).then((r) => r.data),
+  options: () => api.get('/organizations/options').then((r) => r.data),
   get: (id) => api.get(`/organizations/${id}`).then((r) => r.data),
   create: (formData) =>
     api.post('/organizations', formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data),
@@ -219,10 +220,6 @@ export const assetApi = {
   download: (id) => api.post(`/assets/${id}/download`).then((r) => r.data),
 };
 
-// Organizations dropdown options (id + name + color) for pickers.
-export const organizationOptionsApi = {
-  options: () => api.get('/organizations/options').then((r) => r.data),
-};
 
 // Social media accounts / handlers directory.
 export const socialAccountApi = {

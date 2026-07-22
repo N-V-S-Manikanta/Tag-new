@@ -1,7 +1,6 @@
 // Shared social-post sync logic used by both the manual endpoint and the daily
 // auto-sync job. FULL fetches ~a year (backfill); RECENT fetches the last several
 // weeks (fast daily refresh that catches new posts + updates recent metrics).
-import Organization from '../models/Organization.js';
 import SocialPost from '../models/SocialPost.js';
 import { hasToken as hasMeta, getPageToken, getInstagramPosts, getFacebookPosts } from './metaService.js';
 import { hasKey as hasYt, getYoutubePosts } from './youtubeService.js';
@@ -57,31 +56,11 @@ export const upsertPosts = async (orgId, platform, posts) => {
   return n;
 };
 
-// Sync one org + platform. Returns { synced } or { skipped:true }.
+// Sync one org + platform. Returns { synced } or { skipped:true }. The daily
+// backfill/refresh loop over all orgs lives in services/dailyAnalyticsRefresh.js,
+// which calls syncOrgPlatform per org alongside the account-metric snapshot.
 export const syncOrgPlatform = async (org, platform, { full = false } = {}) => {
   if (!orgSupports(org, platform)) return { skipped: true, synced: 0 };
   const posts = await fetchPosts(org, platform, full);
   return { synced: await upsertPosts(org._id, platform, posts), full };
-};
-
-// Daily job: sync every mapped org × platform. The first time an org/platform has
-// no stored posts it does a FULL backfill (a year); after that it's a fast RECENT
-// refresh. Errors are captured per job so one failure never stops the rest.
-export const runDailyAutoSync = async () => {
-  const orgs = await Organization.find({ isActive: true })
-    .select('name metaPageId metaInstagramId youtubeChannelId').lean();
-  const results = [];
-  for (const org of orgs) {
-    for (const platform of SOCIAL_PLATFORMS) {
-      if (!orgSupports(org, platform)) continue;
-      try {
-        const existing = await SocialPost.countDocuments({ organization: org._id, platform });
-        const r = await syncOrgPlatform(org, platform, { full: existing === 0 });
-        results.push({ org: org.name, platform, ...r });
-      } catch (err) {
-        results.push({ org: org.name, platform, error: err.message });
-      }
-    }
-  }
-  return results;
 };

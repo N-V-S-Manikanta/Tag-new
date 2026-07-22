@@ -63,10 +63,6 @@ export const organizationApi = {
   options: () => api.get('/organizations/options').then((r) => r.data),
 };
 
-// Competitor benchmark — read-only for the product app (auto-scoped to user's org).
-export const competitorApi = {
-  list: (platform) => api.get('/competitors', { params: { platform } }).then((r) => r.data),
-};
 
 // ---- Brand Library / Social Handlers / Premium Packs / Goals (read-only for product) ----
 export const libraryApi = {

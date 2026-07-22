@@ -6,7 +6,7 @@ import PageHeader from './layout/PageHeader.jsx';
 import { Button } from './ui/Button.jsx';
 import { Card, Input, Select, Badge, Avatar, Skeleton, EmptyState } from './ui/primitives.jsx';
 import { Modal } from './ui/Modal.jsx';
-import { organizationOptionsApi } from '../api/endpoints.js';
+import { organizationApi } from '../api/endpoints.js';
 import { useAuthStore } from '../store/authStore.js';
 import { formatDate, formatBytes, cn } from '../lib/utils.js';
 
@@ -29,7 +29,7 @@ export default function RepositoryPage({ cfg }) {
   const [editItem, setEditItem] = useState(null);
   const [preview, setPreview] = useState(null);
 
-  const { data: orgData } = useQuery({ queryKey: ['org-options'], queryFn: organizationOptionsApi.options });
+  const { data: orgData } = useQuery({ queryKey: ['org-options'], queryFn: organizationApi.options });
   const orgs = orgData?.organizations || [];
 
   const { data, isLoading } = useQuery({

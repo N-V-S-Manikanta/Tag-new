@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Activity, CalendarDays, Flame, Loader2, ShieldCheck, Sparkles, TrendingUp } from 'lucide-react';
 import { activityApi } from '../../api/endpoints.js';
@@ -7,13 +7,33 @@ import { Modal } from '../ui/Modal.jsx';
 import { Card, Avatar, Badge, EmptyState, Skeleton } from '../ui/primitives.jsx';
 import { cn, formatDateTime, formatNumber, timeAgo } from '../../lib/utils.js';
 
-const CELL = 16;
 const GAP = 4;
-const STEP = CELL + GAP;
 const LABEL_W = 28;
+const MIN_STEP = 15; // smallest cell+gap before the grid scrolls horizontally
+const MAX_STEP = 22; // largest, so squares never look oversized on wide screens
 const WEEKDAY_LABELS = ['', 'Mon', '', 'Wed', '', 'Fri', ''];
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const LEVEL_ALPHA = [0, 0.22, 0.42, 0.68, 0.95];
+
+// Size the grid so its columns fill the available width. Every offset (month +
+// weekday labels, cells) derives from STEP, so this keeps the layout aligned.
+function useFitStep(ref, cols) {
+  const [step, setStep] = useState(20);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || !cols) return undefined;
+    const measure = () => {
+      const avail = el.clientWidth - LABEL_W;
+      if (avail <= 0) return;
+      setStep(Math.max(MIN_STEP, Math.min(MAX_STEP, Math.floor(avail / cols))));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [ref, cols]);
+  return step;
+}
 
 const ACTION_META = {
   TEMPLATE_UPLOAD: { tone: 'text-sky-600 bg-sky-50 dark:bg-sky-500/10', label: 'Template' },
@@ -113,6 +133,9 @@ export default function ActivityHeatmapCard({ organizationId }) {
 
   const weeks = useMemo(() => buildWeeks(cells), [cells]);
   const levelOf = useMemo(() => makeLevelFn(cells), [cells]);
+  const scrollRef = useRef(null);
+  const STEP = useFitStep(scrollRef, weeks.length);
+  const CELL = STEP - GAP;
   const gridWidth = weeks.length * STEP;
   const rgb = '#0A66C2';
   const [r, g, b] = hexToRgb(rgb);
@@ -210,7 +233,7 @@ export default function ActivityHeatmapCard({ organizationId }) {
                 <span>Activity density</span>
                 <span className="hidden sm:inline">Click any square for details</span>
               </div>
-              <div className="overflow-x-auto pb-1">
+              <div ref={scrollRef} className="overflow-x-auto pb-1">
                 <div className="inline-block min-w-full">
                   <div className="flex">
                     <div style={{ width: LABEL_W }} />
@@ -241,11 +264,11 @@ export default function ActivityHeatmapCard({ organizationId }) {
                                 onClick={() => setSelectedDate(cell.date)}
                                 title={`${formatNumber(cell.value)} actions · ${prettyDate(cell.date)}`}
                                 className={cn(
-                                  'group relative flex h-4 w-4 items-center justify-center rounded-[4px] outline-none transition-all duration-200 focus-visible:ring-2 focus-visible:ring-[#0A66C2]/40',
+                                  'group relative flex items-center justify-center rounded-[4px] outline-none transition-all duration-200 focus-visible:ring-2 focus-visible:ring-[#0A66C2]/40',
                                   lvl === 0 && 'bg-slate-100 dark:bg-slate-800',
                                   isSelected && 'ring-2 ring-[#0A66C2] ring-offset-2 ring-offset-white dark:ring-offset-slate-950'
                                 )}
-                                style={{ backgroundColor: fill(lvl) }}
+                                style={{ width: CELL, height: CELL, backgroundColor: fill(lvl) }}
                               >
                                 <span className="sr-only">{prettyDate(cell.date)} with {cell.value} activities</span>
                                 <span className="pointer-events-none absolute inset-0 rounded-[4px] bg-white/0 transition-colors group-hover:bg-white/15" />

@@ -1,16 +1,16 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { Activity, Flame, CalendarDays, TrendingUp, Loader2 } from 'lucide-react';
 import { analyticsApi } from '../api/endpoints.js';
 import { Card } from './ui/primitives.jsx';
 import { cn, formatNumber, PLATFORM_STYLES } from '../lib/utils.js';
 
-const CELL = 12; // px square
-const GAP = 3;   // px between cells
-const STEP = CELL + GAP;
-const LABEL_W = 26; // left weekday-label column
+const GAP = 3;        // px between cells
+const LABEL_W = 30;   // left weekday-label column
+const MIN_STEP = 13;  // smallest cell+gap (below this the grid scrolls horizontally)
+const MAX_STEP = 20;  // largest cell+gap, so squares never look oversized
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-const LEVEL_ALPHA = [0, 0.28, 0.5, 0.72, 1]; // 0 = empty; 1..4 = intensity
+const LEVEL_ALPHA = [0, 0.25, 0.45, 0.68, 1]; // 0 = empty; 1..4 = intensity
 const WEEKDAY_LABELS = ['', 'Mon', '', 'Wed', '', 'Fri', ''];
 
 const prettyDate = (key) => { const [y, m, d] = key.split('-').map(Number); return `${MONTHS[m - 1]} ${d}, ${y}`; };
@@ -37,10 +37,32 @@ function makeLevelFn(cells) {
   return (v) => (v <= 0 ? 0 : v <= t1 ? 1 : v <= t2 ? 2 : v <= t3 ? 3 : 4);
 }
 
+// Size the grid so its columns fill the available width. Because every offset in
+// the grid (month labels, weekday labels, cells) is derived from STEP, sizing
+// this one number keeps the whole layout perfectly aligned at any width.
+function useFitStep(ref, cols) {
+  const [step, setStep] = useState(16);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || !cols) return undefined;
+    const measure = () => {
+      const avail = el.clientWidth - LABEL_W;
+      if (avail <= 0) return;
+      setStep(Math.max(MIN_STEP, Math.min(MAX_STEP, Math.floor(avail / cols))));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [ref, cols]);
+  return step;
+}
+
 export default function ActivityHeatmap({ orgId, platform }) {
   const [metric, setMetric] = useState(''); // '' → backend picks the platform default
   // Reset to the default metric whenever the platform changes.
   useEffect(() => { setMetric(''); }, [platform]);
+  const scrollRef = useRef(null);
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['heatmap', platform, orgId, metric],
@@ -53,6 +75,8 @@ export default function ActivityHeatmap({ orgId, platform }) {
   const cells = data?.cells || [];
   const weeks = useMemo(() => buildWeeks(cells), [cells]);
   const levelOf = useMemo(() => makeLevelFn(cells), [cells]);
+  const STEP = useFitStep(scrollRef, weeks.length);
+  const CELL = STEP - GAP;
   const rgb = PLATFORM_STYLES[platform]?.color || '#f15d27';
   const [r, g, b] = hexToRgb(rgb);
   const fill = (lvl) => (lvl === 0 ? undefined : `rgba(${r},${g},${b},${LEVEL_ALPHA[lvl]})`);
@@ -117,13 +141,13 @@ export default function ActivityHeatmap({ orgId, platform }) {
               <Stat icon={Flame} label="Best day" value={stats.bestDay ? formatNumber(stats.bestDay.value) : '—'} sub={stats.bestDay ? prettyDate(stats.bestDay.date) : ''} color={rgb} />
             </div>
 
-            {/* The grid */}
-            <div className="overflow-x-auto pb-1">
-              <div className="inline-block">
+            {/* The grid — sized to fill the card width */}
+            <div ref={scrollRef} className="overflow-x-auto pb-1">
+              <div style={{ width: Math.max(gridWidth + LABEL_W, 0) }}>
                 {/* Month labels */}
                 <div className="flex">
                   <div style={{ width: LABEL_W }} />
-                  <div className="relative" style={{ height: 15, width: gridWidth }}>
+                  <div className="relative" style={{ height: 16, width: gridWidth }}>
                     {months.map((m) => (
                       <span key={`${m.col}-${m.label}`} className="absolute top-0 text-[10px] font-medium text-slate-400" style={{ left: m.col * STEP }}>{m.label}</span>
                     ))}
@@ -133,7 +157,7 @@ export default function ActivityHeatmap({ orgId, platform }) {
                 <div className="flex">
                   <div className="flex flex-col" style={{ width: LABEL_W, gap: GAP }}>
                     {WEEKDAY_LABELS.map((lbl, i) => (
-                      <div key={i} className="text-[10px] leading-none text-slate-400" style={{ height: CELL, display: 'flex', alignItems: 'center' }}>{lbl}</div>
+                      <div key={i} className="flex items-center text-[10px] leading-none text-slate-400" style={{ height: CELL }}>{lbl}</div>
                     ))}
                   </div>
                   <div className="flex" style={{ gap: GAP }}>
@@ -146,7 +170,10 @@ export default function ActivityHeatmap({ orgId, platform }) {
                             <div
                               key={ri}
                               title={`${formatNumber(cell.value)} ${data.label.toLowerCase()} · ${prettyDate(cell.date)}`}
-                              className={cn('rounded-[3px] transition-colors', lvl === 0 && 'bg-slate-100 dark:bg-slate-800')}
+                              className={cn(
+                                'rounded-[3px] ring-1 ring-inset transition-transform hover:scale-[1.35]',
+                                lvl === 0 ? 'bg-slate-100 ring-slate-200/70 dark:bg-slate-800 dark:ring-slate-700/60' : 'ring-black/[0.06] dark:ring-white/[0.06]'
+                              )}
                               style={{ width: CELL, height: CELL, backgroundColor: fill(lvl) }}
                             />
                           );
@@ -162,8 +189,8 @@ export default function ActivityHeatmap({ orgId, platform }) {
             <div className="mt-3 flex items-center justify-end gap-1.5 text-[11px] text-slate-400">
               Less
               {[0, 1, 2, 3, 4].map((lvl) => (
-                <span key={lvl} className={cn('rounded-[3px]', lvl === 0 && 'bg-slate-100 dark:bg-slate-800')}
-                  style={{ width: CELL, height: CELL, backgroundColor: fill(lvl) }} />
+                <span key={lvl} className={cn('rounded-[3px] ring-1 ring-inset', lvl === 0 ? 'bg-slate-100 ring-slate-200/70 dark:bg-slate-800 dark:ring-slate-700/60' : 'ring-black/[0.06] dark:ring-white/[0.06]')}
+                  style={{ width: 12, height: 12, backgroundColor: fill(lvl) }} />
               ))}
               More
             </div>

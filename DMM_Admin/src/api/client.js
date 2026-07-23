@@ -1,4 +1,5 @@
 import axios from 'axios';
+import toast from 'react-hot-toast';
 
 // Admin portal uses its own token storage key so it never clashes with the
 // main product app's session.
@@ -27,9 +28,17 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (res) => res,
   (err) => {
-    if (err.response?.status === 401 && !err.config?.url?.includes('/auth/login')) {
+    const status = err.response?.status;
+    if (status === 401 && !err.config?.url?.includes('/auth/login')) {
       localStorage.removeItem(TOKEN_KEY);
       if (!window.location.pathname.startsWith('/login')) window.location.href = '/login';
+    }
+    // View-only (Chairman) accounts are hard-blocked from any write on the
+    // backend, which replies 403 with a "view-only" message. Surface it so the
+    // UI explains why nothing changed.
+    if (status === 403) {
+      const msg = err.response?.data?.message || '';
+      if (msg.toLowerCase().includes('view-only')) toast.error(msg);
     }
     return Promise.reject(err);
   }

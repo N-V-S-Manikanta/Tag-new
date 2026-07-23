@@ -13,19 +13,28 @@ export const protect = asyncHandler(async (req, res, next) => {
     res.status(401);
     throw new Error('Not authorized, no token');
   }
+
+  let user;
   try {
     const decoded = verifyToken(token);
-    const user = await User.findById(decoded.id).populate('organization', 'name slug logo color isActive');
-    if (!user || !user.isActive) {
-      res.status(401);
-      throw new Error('Not authorized, user not found');
-    }
-    req.user = user;
-    next();
+    user = await User.findById(decoded.id).populate('organization', 'name slug logo color isActive');
   } catch (err) {
     res.status(401);
     throw new Error('Not authorized, token failed');
   }
+  if (!user || !user.isActive) {
+    res.status(401);
+    throw new Error('Not authorized, user not found');
+  }
+  req.user = user;
+
+  // View-only accounts (e.g. the Chairman) may read anything but must never
+  // mutate. Blocking every write here means no individual route can forget to.
+  if (user.viewOnly && !['GET', 'HEAD', 'OPTIONS'].includes(req.method.toUpperCase())) {
+    res.status(403);
+    throw new Error('This is a view-only account — changes are not permitted.');
+  }
+  next();
 });
 
 // Restricts a route to one or more roles. Usage: authorize('CEO')

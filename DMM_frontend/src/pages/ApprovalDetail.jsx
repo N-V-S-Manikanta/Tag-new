@@ -42,6 +42,7 @@ export default function ApprovalDetail() {
     refetchIntervalInBackground: false,
   });
   const r = data?.request;
+  const isViewer = !!user?.viewOnly; // Chairman — read-only
   const isOwner = r && String(r.createdBy?._id) === String(user?._id); // coordinator for a design
   const isDesigner = r && String(r.designer?._id || r.designer || '') === String(user?._id);
   const isHandler = r && String(r.assignedTo?._id || r.assignedTo || '') === String(user?._id);
@@ -80,7 +81,7 @@ export default function ApprovalDetail() {
   const canResubmit = r.status === 'REJECTED' && (isDesign ? isDesigner : isOwner);
   const canMarkPosted = r.status === 'APPROVED' && (isDesign ? isHandler : isOwner);
   const canDownloadFinal = finalImages.length > 0 && ['APPROVED', 'POSTED', 'DELIVERED'].includes(r.status) && (isOwner || privileged || isDesigner || isHandler);
-  const canDelete = isOwner || ['ADMIN', 'CEO'].includes(user?.role);
+  const canDelete = !isViewer && (isOwner || ['ADMIN', 'CEO'].includes(user?.role));
 
   return (
     <div>
@@ -220,7 +221,7 @@ function LifecycleCard({ r }) {
   };
 
   if (r.type === 'DESIGN') {
-    const finalLabel = r.status === 'POSTED' ? 'Posted' : r.status === 'DELIVERED' ? 'Delivered' : r.needsPosting ? 'Post' : 'Deliver';
+    const finalLabel = r.status === 'POSTED' ? 'Posted' : r.status === 'DELIVERED' ? 'Delivered' : r.deliveryMode === 'PRINT' ? 'Deliver' : 'Post';
     const steps = [
       { label: 'Brief', date: r.createdAt, note: r.designer?.name ? `to ${r.designer.name}` : null },
       { label: 'In design', date: r.submittedAt },
@@ -251,7 +252,7 @@ function LifecycleCard({ r }) {
 // Short contextual line under the DESIGN lifecycle bar.
 function DesignHint({ r }) {
   if (r.status === 'IN_DESIGN') return <p className="mt-3 flex items-center gap-1.5 text-xs font-medium text-indigo-600 dark:text-indigo-400"><Palette className="h-4 w-4" /> {r.designer?.name || 'The designer'} is working on this brief</p>;
-  if (r.status === 'APPROVED' && !r.assignedTo) return <p className="mt-3 flex items-center gap-1.5 text-xs font-medium text-violet-600 dark:text-violet-400"><UserCheck className="h-4 w-4" /> Approved — {r.needsPosting ? 'allocate a handler to post it' : 'deliver it to the coordinator'}</p>;
+  if (r.status === 'APPROVED' && !r.assignedTo) return <p className="mt-3 flex items-center gap-1.5 text-xs font-medium text-violet-600 dark:text-violet-400"><UserCheck className="h-4 w-4" /> Approved — {r.deliveryMode === 'PRINT' ? 'deliver it to the coordinator' : 'allocate a handler to post it'}</p>;
   if (r.status === 'APPROVED' && r.assignedTo) return <p className="mt-3 flex items-center gap-1.5 text-xs font-medium text-violet-600 dark:text-violet-400"><Send className="h-4 w-4" /> Allocated to {r.assignedTo?.name} — awaiting posting</p>;
   if (r.status === 'DELIVERED') return <p className="mt-3 flex items-center gap-1.5 text-xs font-medium text-teal-600 dark:text-teal-400"><PackageCheck className="h-4 w-4" /> Delivered to {r.createdBy?.name || 'the coordinator'}</p>;
   return null;
@@ -402,9 +403,9 @@ function RoutingCard({ r, privileged, isHandler, onChanged }) {
     <Card className="p-5">
       <div className="mb-4 flex items-center justify-between">
         <h3 className="flex items-center gap-2 font-bold text-slate-800 dark:text-white"><Share2 className="h-4 w-4 text-brand-500" /> Route this design</h3>
-        {r.needsPosting
-          ? <span className="rounded-full bg-brand-50 px-2 py-0.5 text-[11px] font-semibold text-brand-700 dark:bg-brand-500/15 dark:text-brand-300">Coordinator asked to post</span>
-          : <span className="rounded-full bg-teal-50 px-2 py-0.5 text-[11px] font-semibold text-teal-700 dark:bg-teal-500/15 dark:text-teal-300">Coordinator wants delivery</span>}
+        {r.deliveryMode === 'PRINT'
+          ? <span className="rounded-full bg-teal-50 px-2 py-0.5 text-[11px] font-semibold text-teal-700 dark:bg-teal-500/15 dark:text-teal-300">Coordinator wants: Print (keep a copy)</span>
+          : <span className="rounded-full bg-brand-50 px-2 py-0.5 text-[11px] font-semibold text-brand-700 dark:bg-brand-500/15 dark:text-brand-300">Coordinator wants: Digital (post to channels)</span>}
       </div>
 
       {allocated && mode !== 'allocate' && (
@@ -437,15 +438,15 @@ function RoutingCard({ r, privileged, isHandler, onChanged }) {
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
           <button type="button" onClick={() => setMode('allocate')}
-            className={cn('rounded-2xl border-2 p-4 text-left transition', r.needsPosting ? 'border-brand-500 bg-brand-50/60 dark:bg-brand-500/10' : 'border-slate-200 hover:border-brand-300 dark:border-slate-700')}>
-            <Share2 className={cn('h-5 w-5', r.needsPosting ? 'text-brand-600 dark:text-brand-400' : 'text-slate-400')} />
+            className={cn('rounded-2xl border-2 p-4 text-left transition', r.deliveryMode !== 'PRINT' ? 'border-brand-500 bg-brand-50/60 dark:bg-brand-500/10' : 'border-slate-200 hover:border-brand-300 dark:border-slate-700')}>
+            <Share2 className={cn('h-5 w-5', r.deliveryMode !== 'PRINT' ? 'text-brand-600 dark:text-brand-400' : 'text-slate-400')} />
             <p className="mt-2 text-sm font-bold text-slate-800 dark:text-white">{allocated ? 'Re-allocate handler' : 'Allocate to social handler'}</p>
             <p className="mt-0.5 text-xs text-slate-400">A handler posts it on {r.platform}.</p>
           </button>
           <button type="button" disabled={deliverMut.isPending}
             onClick={() => window.confirm('Deliver the final design to the coordinator? This closes the request without posting.') && deliverMut.mutate()}
-            className={cn('rounded-2xl border-2 p-4 text-left transition disabled:opacity-60', !r.needsPosting ? 'border-teal-500 bg-teal-50/60 dark:bg-teal-500/10' : 'border-slate-200 hover:border-teal-300 dark:border-slate-700')}>
-            <Truck className={cn('h-5 w-5', !r.needsPosting ? 'text-teal-600 dark:text-teal-400' : 'text-slate-400')} />
+            className={cn('rounded-2xl border-2 p-4 text-left transition disabled:opacity-60', r.deliveryMode === 'PRINT' ? 'border-teal-500 bg-teal-50/60 dark:bg-teal-500/10' : 'border-slate-200 hover:border-teal-300 dark:border-slate-700')}>
+            <Truck className={cn('h-5 w-5', r.deliveryMode === 'PRINT' ? 'text-teal-600 dark:text-teal-400' : 'text-slate-400')} />
             <p className="mt-2 text-sm font-bold text-slate-800 dark:text-white">Deliver to coordinator</p>
             <p className="mt-0.5 text-xs text-slate-400">Send the final file back to {r.createdBy?.name || 'the coordinator'}.</p>
           </button>
@@ -473,9 +474,9 @@ function PostDetailsCard({ r }) {
         <Def label="Platform" value={<Badge>{r.platform}</Badge>} />
         <Def label="Aspect ratio" value={r.aspectRatio || '—'} />
         {isDesign && (
-          <Def label="Needs posting" value={r.needsPosting
-            ? <span className="inline-flex items-center gap-1 font-semibold text-brand-600 dark:text-brand-400"><Share2 className="h-3.5 w-3.5" /> Yes — post on social</span>
-            : <span className="inline-flex items-center gap-1 font-semibold text-teal-600 dark:text-teal-400"><PackageCheck className="h-3.5 w-3.5" /> No — deliver to coordinator</span>} />
+          <Def label="Delivery type" value={r.deliveryMode === 'PRINT'
+            ? <span className="inline-flex items-center gap-1 font-semibold text-teal-600 dark:text-teal-400"><PackageCheck className="h-3.5 w-3.5" /> Print — deliver a copy</span>
+            : <span className="inline-flex items-center gap-1 font-semibold text-brand-600 dark:text-brand-400"><Share2 className="h-3.5 w-3.5" /> Digital — post to channels</span>} />
         )}
         <Def label={isDesign ? 'Raised by (coordinator)' : 'Submitted by'} value={
           <span className="flex items-center gap-2">
@@ -533,6 +534,7 @@ function ActivityCard({ r, user, onOpenImage }) {
   const fileRef = useRef(null);
   const [text, setText] = useState('');
   const [files, setFiles] = useState([]);
+  const isViewer = !!user?.viewOnly;
 
   // Legacy rows predate `kind` — comments with a category are reviewer feedback.
   const items = [
@@ -618,7 +620,10 @@ function ActivityCard({ r, user, onOpenImage }) {
         })}
       </div>
 
-      {/* Composer */}
+      {/* Composer (hidden for the view-only Chairman) */}
+      {isViewer ? (
+        <p className="mt-3 border-t border-slate-100 pt-3 text-center text-xs text-slate-400 dark:border-slate-800">View-only access — you can’t post messages.</p>
+      ) : (
       <div className="mt-3 border-t border-slate-100 dark:border-slate-800 pt-3">
         {files.length > 0 && (
           <div className="mb-2 flex flex-wrap gap-1.5">
@@ -643,6 +648,7 @@ function ActivityCard({ r, user, onOpenImage }) {
           </Button>
         </div>
       </div>
+      )}
     </Card>
   );
 }

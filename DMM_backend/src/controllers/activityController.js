@@ -19,7 +19,8 @@ const buildHeatmapCells = (startDate, days, counts) => {
 const getActivityScope = (req, requestedOrganizationId) => {
   const query = {};
 
-  if (req.user?.isSuperAdmin) {
+  // The super admin and the view-only Chairman both see platform-wide activity.
+  if (req.user?.isSuperAdmin || req.user?.viewOnly) {
     if (requestedOrganizationId) query.organization = requestedOrganizationId;
     return query;
   }

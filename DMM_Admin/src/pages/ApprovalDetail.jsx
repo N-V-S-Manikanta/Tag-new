@@ -5,7 +5,7 @@ import toast from 'react-hot-toast';
 import {
   ArrowLeft, Check, X, Plus, Trash2, Hash, Play, Send, Paperclip, Inbox,
   CheckCircle2, RefreshCw, MessageSquareWarning, FileText, Rocket, Images as ImagesIcon,
-  UserCheck, Palette, Truck, Route, Sparkles,
+  UserCheck, Palette, Truck, Route, Sparkles, Globe, Printer,
 } from 'lucide-react';
 import { approvalApi } from '../api/endpoints.js';
 import { useAuthStore } from '../store/authStore.js';
@@ -76,7 +76,8 @@ export default function ApprovalDetail() {
     );
   }
 
-  const canDecide = !!user?.isSuperAdmin && (r.status === 'PENDING' || r.status === 'RESUBMITTED');
+  const isViewer = !!user?.viewOnly; // Chairman: sees everything, changes nothing
+  const canDecide = !!user?.isSuperAdmin && !isViewer && (r.status === 'PENDING' || r.status === 'RESUBMITTED');
 
   return (
     <div>
@@ -106,11 +107,13 @@ export default function ApprovalDetail() {
               <Button variant="danger" onClick={() => setRejectOpen(true)}><X className="h-4 w-4" /> Request changes</Button>
             </>
           )}
-          <Button variant="outline" loading={deleteMut.isPending}
-            className="text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-500/10"
-            onClick={() => { if (window.confirm('Delete this request and all its media? This cannot be undone.')) deleteMut.mutate(); }}>
-            <Trash2 className="h-4 w-4" /> Delete
-          </Button>
+          {!isViewer && (
+            <Button variant="outline" loading={deleteMut.isPending}
+              className="text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-500/10"
+              onClick={() => { if (window.confirm('Delete this request and all its media? This cannot be undone.')) deleteMut.mutate(); }}>
+              <Trash2 className="h-4 w-4" /> Delete
+            </Button>
+          )}
         </div>
       </div>
 
@@ -225,15 +228,18 @@ function LifecycleCard({ r }) {
 // After a design is APPROVED, a super admin routes it: either allocate it to a
 // social handler who will post it, or deliver it back to the coordinator who
 // raised the brief. Both paths are always available; the coordinator's
-// `needsPosting` hint only decides which one we visually lead with.
+// `deliveryMode` (DIGITAL = post to channels, PRINT = keep a copy) only decides
+// which one we visually lead with.
 function RoutingCard({ r, user, onChanged }) {
   const isSuperAdmin = !!user?.isSuperAdmin;
+  const isViewer = !!user?.viewOnly;
   const [allocateOpen, setAllocateOpen] = useState(false);
   const [delivering, setDelivering] = useState(false);
 
+  const isDigital = r.deliveryMode === 'DIGITAL';
   const delivered = r.status === 'DELIVERED';
   const allocated = !!r.assignedTo; // allocated (APPROVED + handler) or already POSTED
-  const canRoute = isSuperAdmin && r.status === 'APPROVED' && !allocated && !delivered;
+  const canRoute = isSuperAdmin && !isViewer && r.status === 'APPROVED' && !allocated && !delivered;
 
   // Nothing to route until the design is approved (or already routed).
   if (!canRoute && !allocated && !delivered) return null;
@@ -258,9 +264,10 @@ function RoutingCard({ r, user, onChanged }) {
         <h3 className="flex items-center gap-2 font-bold text-slate-800 dark:text-white">
           <Route className="h-4 w-4 text-violet-500" /> Route this design
         </h3>
-        {r.needsPosting && canRoute && (
+        {canRoute && (
           <span className="inline-flex items-center gap-1 rounded-full bg-brand-50 px-2.5 py-0.5 text-xs font-semibold text-brand-700 dark:bg-brand-500/10 dark:text-brand-300">
-            <Sparkles className="h-3 w-3" /> Coordinator wants this posted
+            <Sparkles className="h-3 w-3" />
+            {isDigital ? 'Coordinator wants: Digital (post to channels)' : 'Coordinator wants: Print (keep a copy)'}
           </span>
         )}
       </div>
@@ -309,7 +316,7 @@ function RoutingCard({ r, user, onChanged }) {
               title="Allocate to a social handler"
               desc="Hand the design to a handler who will publish it."
               cta="Choose handler"
-              primary={!!r.needsPosting}
+              primary={isDigital}
               onClick={() => setAllocateOpen(true)}
             />
             <RouteOption
@@ -317,7 +324,7 @@ function RoutingCard({ r, user, onChanged }) {
               title="Deliver to coordinator"
               desc={`Return the design to ${r.createdBy?.name || 'the coordinator'} — no posting needed.`}
               cta="Deliver"
-              primary={!r.needsPosting}
+              primary={!isDigital}
               loading={delivering}
               onClick={deliver}
             />
@@ -480,12 +487,14 @@ function DetailsCard({ r }) {
           <>
             <DetailField label="Coordinator"><PersonInline user={r.createdBy} /></DetailField>
             <DetailField label="Designer"><PersonInline user={r.designer} /></DetailField>
-            <DetailField label="Needs posting">
-              <span className={cn('inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold',
-                r.needsPosting
+            <DetailField label="Delivery type">
+              <span className={cn('inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold',
+                r.deliveryMode === 'DIGITAL'
                   ? 'bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-300'
                   : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400')}>
-                {r.needsPosting ? 'Yes — should be posted' : 'No'}
+                {r.deliveryMode === 'DIGITAL'
+                  ? <><Globe className="h-3 w-3" /> Digital</>
+                  : <><Printer className="h-3 w-3" /> Print</>}
               </span>
             </DetailField>
             <DetailField label="Raised on">{formatDateTime(r.createdAt)}</DetailField>
@@ -690,6 +699,7 @@ function FeedItem({ item, own }) {
 function ActivityCard({ r }) {
   const qc = useQueryClient();
   const me = useAuthStore((s) => s.user);
+  const isViewer = !!me?.viewOnly;
   const [text, setText] = useState('');
   const [files, setFiles] = useState([]);
   const fileRef = useRef(null);
@@ -743,7 +753,9 @@ function ActivityCard({ r }) {
         ))}
       </div>
 
-      {/* Composer: message the submitter, optionally with reference media */}
+      {/* Composer: message the submitter, optionally with reference media.
+          Hidden for view-only (Chairman) accounts — they can read the thread. */}
+      {!isViewer && (
       <div className="border-t border-slate-100 p-4 dark:border-slate-800">
         {files.length > 0 && (
           <div className="mb-2 flex flex-wrap gap-1.5">
@@ -771,6 +783,7 @@ function ActivityCard({ r }) {
         <input ref={fileRef} type="file" accept="image/*,video/*" multiple className="hidden"
           onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }} />
       </div>
+      )}
     </Card>
   );
 }

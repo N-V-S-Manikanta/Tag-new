@@ -23,10 +23,11 @@ const RATIOS = [
 export default function CreateApprovalModal({ onClose, onSaved, defaultType = 'POST', sourceDesignId = '' }) {
   const { user } = useAuthStore();
   const isCoordinator = user?.role === 'USER' && user?.userType === 'COORDINATOR';
+  const isPrincipal = user?.role === 'CEO';
   const ownOrgId = user?.organization?._id || user?.organization || '';
-  // Coordinators raise DESIGN briefs; everyone else raises standalone POSTs.
-  // (A legacy ?compose=post&design flow still forces POST via sourceDesignId.)
-  const briefMode = isCoordinator && !sourceDesignId;
+  // Coordinators AND principals raise DESIGN briefs; everyone else raises
+  // standalone POSTs. (A legacy ?compose flow still forces POST via sourceDesignId.)
+  const briefMode = (isCoordinator || isPrincipal) && !sourceDesignId;
   const type = briefMode ? 'DESIGN' : 'POST';
 
   const STEPS = briefMode
@@ -36,7 +37,7 @@ export default function CreateApprovalModal({ onClose, onSaved, defaultType = 'P
   const [step, setStep] = useState(1);
   const [form, setForm] = useState({
     title: '', platform: 'LinkedIn', caption: '', description: '', hashtags: '',
-    aspectRatio: '1:1', organization: ownOrgId, designer: '', needsPosting: false,
+    aspectRatio: '1:1', organization: ownOrgId, designer: '', deliveryType: 'DIGITAL',
   });
   const [images, setImages] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -116,7 +117,7 @@ export default function CreateApprovalModal({ onClose, onSaved, defaultType = 'P
       fd.append('aspectRatio', form.aspectRatio);
       if (briefMode) {
         fd.append('designer', form.designer);
-        fd.append('needsPosting', form.needsPosting ? 'true' : 'false');
+        fd.append('deliveryMode', form.deliveryType);
       }
       if (sourceDesignId) fd.append('sourceDesign', sourceDesignId);
       images.forEach((img) => fd.append('images', img));
@@ -202,25 +203,24 @@ export default function CreateApprovalModal({ onClose, onSaved, defaultType = 'P
                 ) : null;
               })()}
 
-              {/* Needs-posting toggle */}
-              <button
-                type="button" onClick={() => setForm({ ...form, needsPosting: !form.needsPosting })}
-                className={cn(
-                  'flex w-full items-center justify-between gap-3 rounded-xl border-2 p-3.5 text-left transition',
-                  form.needsPosting ? 'border-brand-500 bg-brand-50/60 dark:bg-brand-500/10' : 'border-slate-200 hover:border-brand-300 dark:border-slate-700'
-                )}
-              >
-                <span className="flex items-center gap-2.5">
-                  {form.needsPosting ? <Share2 className="h-5 w-5 text-brand-600 dark:text-brand-400" /> : <PackageCheck className="h-5 w-5 text-slate-400" />}
-                  <span>
-                    <span className="block text-sm font-bold text-slate-800 dark:text-white">{form.needsPosting ? 'Post it on social media' : 'Just deliver it to me'}</span>
-                    <span className="block text-xs text-slate-400">{form.needsPosting ? 'After approval, a social handler will publish it.' : 'After approval, the final file comes back to you.'}</span>
-                  </span>
-                </span>
-                <span className={cn('relative h-6 w-11 shrink-0 rounded-full transition', form.needsPosting ? 'bg-brand-600' : 'bg-slate-300 dark:bg-slate-600')}>
-                  <span className={cn('absolute top-0.5 h-5 w-5 rounded-full bg-white transition-all', form.needsPosting ? 'left-[22px]' : 'left-0.5')} />
-                </span>
-              </button>
+              {/* Delivery type: Digital (post) vs Print (deliver a copy) */}
+              <div>
+                <span className="mb-1.5 block text-sm font-medium text-slate-600 dark:text-slate-300">Delivery type</span>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {[
+                    { key: 'DIGITAL', icon: Share2, title: 'Digital', desc: 'Post to social channels after approval.' },
+                    { key: 'PRINT', icon: PackageCheck, title: 'Print', desc: 'Delivered back to you to print / keep a copy.' },
+                  ].map((o) => (
+                    <button key={o.key} type="button" onClick={() => setForm({ ...form, deliveryType: o.key })}
+                      className={cn('rounded-2xl border-2 p-4 text-left transition',
+                        form.deliveryType === o.key ? 'border-brand-500 bg-brand-50/60 dark:bg-brand-500/10' : 'border-slate-200 hover:border-brand-300 dark:border-slate-700')}>
+                      <o.icon className={cn('h-5 w-5', form.deliveryType === o.key ? 'text-brand-600 dark:text-brand-400' : 'text-slate-400')} />
+                      <p className="mt-2 text-sm font-bold text-slate-800 dark:text-white">{o.title}</p>
+                      <p className="mt-0.5 text-xs text-slate-400">{o.desc}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
             </>
           )}
 

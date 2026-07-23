@@ -15,6 +15,7 @@ const sanitize = (u) => ({
   role: u.role,
   userType: u.userType || null,
   isSuperAdmin: !!u.isSuperAdmin,
+  viewOnly: !!u.viewOnly,
   avatar: u.avatar,
   jobTitle: u.jobTitle,
   phone: u.phone || '',
@@ -143,6 +144,7 @@ export const createUser = asyncHandler(async (req, res) => {
     skills,
     handles,
     isSuperAdmin,
+    viewOnly,
     phone,
     linkedinUrl,
   } = req.body;
@@ -156,9 +158,11 @@ export const createUser = asyncHandler(async (req, res) => {
   }
   // A super admin is a global ADMIN with the flag set and no organization. Only
   // an existing super admin reaches this route (requireSuperAdmin), so granting
-  // it here is safe.
+  // it here is safe. A view-only account (e.g. the Chairman) is also a global
+  // ADMIN, but read-only — never a super admin.
   const wantSuper = isSuperAdmin === true || isSuperAdmin === 'true';
-  const finalRole = wantSuper ? ROLES.ADMIN : (role || ROLES.USER);
+  const wantViewOnly = (viewOnly === true || viewOnly === 'true') && !wantSuper;
+  const finalRole = (wantSuper || wantViewOnly) ? ROLES.ADMIN : (role || ROLES.USER);
   const finalUserType = finalRole === ROLES.USER ? normalizeUserType(userType) : undefined;
   if (!Object.values(ROLES).includes(finalRole)) {
     res.status(400);
@@ -184,6 +188,7 @@ export const createUser = asyncHandler(async (req, res) => {
     role: finalRole,
     userType: finalUserType,
     isSuperAdmin: wantSuper,
+    viewOnly: wantViewOnly,
     jobTitle: jobTitle || '',
     phone: phone || '',
     linkedinUrl: linkedinUrl || '',
@@ -220,8 +225,9 @@ export const updateUser = asyncHandler(async (req, res) => {
   const user = await User.findById(req.params.id);
   if (!user) { res.status(404); throw new Error('User not found'); }
 
-  const { name, role, userType, jobTitle, isActive, organization, skills, handles, isSuperAdmin, phone, linkedinUrl } = req.body;
+  const { name, role, userType, jobTitle, isActive, organization, skills, handles, isSuperAdmin, viewOnly, phone, linkedinUrl } = req.body;
   const wantSuper = isSuperAdmin === true || isSuperAdmin === 'true';
+  const wantViewOnly = (viewOnly === true || viewOnly === 'true') && !wantSuper;
 
   // A super admin can't be deactivated. Its role can't be changed unless it's
   // being demoted out of super admin (handled below).
@@ -273,6 +279,13 @@ export const updateUser = asyncHandler(async (req, res) => {
     user.isSuperAdmin = wantSuper;
     if (wantSuper) { user.role = ROLES.ADMIN; user.organization = null; user.userType = undefined; }
   }
+  // View-only (Chairman) toggle — a global read-only ADMIN. Mutually exclusive
+  // with super admin, which always keeps write access.
+  if (viewOnly !== undefined) {
+    user.viewOnly = wantViewOnly;
+    if (wantViewOnly) { user.role = ROLES.ADMIN; user.organization = null; user.userType = undefined; }
+  }
+  if (user.isSuperAdmin) user.viewOnly = false; // the super admin is never read-only
   await user.save();
 
   const action = isActive === false ? ACTIVITY_ACTIONS.USER_DEACTIVATED : ACTIVITY_ACTIONS.USER_UPDATED;

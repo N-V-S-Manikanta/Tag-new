@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import {
-  UserPlus, Search, Pencil, KeyRound, Trash2, Users as UsersIcon, ShieldCheck, Crown, User as UserIcon, MoreVertical, Power, Plus, X,
+  UserPlus, Search, Pencil, KeyRound, Trash2, Users as UsersIcon, ShieldCheck, Crown, User as UserIcon, MoreVertical, Power, Plus, X, Eye,
 } from 'lucide-react';
 import { userApi, organizationApi } from '../api/endpoints.js';
 import { useAuthStore } from '../store/authStore.js';
@@ -15,8 +15,14 @@ import { cn, formatDate, roleLabel, roleStyle, userTypeLabel } from '../lib/util
 
 // Filter options (label → internal role value). Super Admin is seed-only.
 const ROLE_FILTERS = [{ value: 'ADMIN', label: 'Super Admin' }, { value: 'CEO', label: 'Admin' }, { value: 'USER', label: 'User' }];
-// Roles the super admin can assign. 'SUPER' is a UI value → role ADMIN + isSuperAdmin.
-const CREATE_ROLES = [{ value: 'SUPER', label: 'Super Admin (all organizations)' }, { value: 'CEO', label: 'Admin' }, { value: 'USER', label: 'User' }];
+// Roles the super admin can assign. 'SUPER' → ADMIN + isSuperAdmin (Branding
+// Director). 'CHAIRMAN' → global ADMIN + viewOnly (read-only oversight).
+const CREATE_ROLES = [
+  { value: 'SUPER', label: 'Super Admin (Branding Director — all organizations)' },
+  { value: 'CHAIRMAN', label: 'Chairman (view-only — all activity)' },
+  { value: 'CEO', label: 'Admin' },
+  { value: 'USER', label: 'User' },
+];
 const USER_TYPES = [{ value: 'DESIGNER', label: 'Designer' }, { value: 'SOCIAL_HANDLER', label: 'Social Handler' }, { value: 'COORDINATOR', label: 'Coordinator' }];
 const PAGE_PLATFORMS = ['LinkedIn', 'Instagram', 'YouTube', 'Facebook', 'X (Twitter)'];
 const AZAR_HANDLE_ORGS = ['Torii Minds', 'NCET', 'NCMS', 'NDC', 'Technical Hub'];
@@ -25,7 +31,8 @@ const roleIcon = (u) => (u?.isSuperAdmin ? ShieldCheck : u?.role === 'USER' ? Us
 export default function Users() {
   const qc = useQueryClient();
   const { user: me } = useAuthStore();
-  const canManage = !!me?.isSuperAdmin; // only the super admin creates / edits accounts
+  const isViewer = !!me?.viewOnly; // Chairman: sees everything, changes nothing
+  const canManage = !!me?.isSuperAdmin && !isViewer; // only a super admin who can write creates / edits accounts
   const [filters, setFilters] = useState({ search: '', role: 'All', organization: 'All' });
   const [modal, setModal] = useState(null);
   const [menuFor, setMenuFor] = useState(null);
@@ -115,7 +122,14 @@ export default function Users() {
                         <div className="flex items-center gap-3">
                           <Avatar src={u.avatar} name={u.name} size="sm" />
                           <div>
-                            <p className="font-semibold text-slate-700 dark:text-slate-200">{u.name} {isSelf && <span className="text-xs font-normal text-slate-400">(you)</span>}</p>
+                            <p className="flex flex-wrap items-center gap-1.5 font-semibold text-slate-700 dark:text-slate-200">
+                              {u.name} {isSelf && <span className="text-xs font-normal text-slate-400">(you)</span>}
+                              {u.viewOnly && (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
+                                  <Eye className="h-3 w-3" /> View-only
+                                </span>
+                              )}
+                            </p>
                             <p className="text-xs text-slate-400">
                               {u.email}{u.jobTitle ? ` · ${u.jobTitle}` : ''}
                               {u.role === 'USER' && u.userType ? ` · ${userTypeLabel(u.userType)}` : ''}
@@ -196,7 +210,7 @@ const MenuItem = ({ icon: Icon, label, onClick, danger }) => (
 function UserFormModal({ editUser, onClose, onSaved }) {
   const [form, setForm] = useState({
     name: editUser?.name || '', email: editUser?.email || '', password: '',
-    role: editUser?.isSuperAdmin ? 'SUPER' : (editUser?.role || 'USER'), jobTitle: editUser?.jobTitle || '',
+    role: editUser?.isSuperAdmin ? 'SUPER' : editUser?.viewOnly ? 'CHAIRMAN' : (editUser?.role || 'USER'), jobTitle: editUser?.jobTitle || '',
     userType: editUser?.userType || 'DESIGNER',
     phone: editUser?.phone || '', linkedinUrl: editUser?.linkedinUrl || '',
     skills: (editUser?.skills || []).join(', '),
@@ -209,6 +223,7 @@ function UserFormModal({ editUser, onClose, onSaved }) {
   const { data: orgData } = useQuery({ queryKey: ['organizations', 'all'], queryFn: () => organizationApi.list() });
   const orgs = orgData?.organizations || [];
   const isSuper = form.role === 'SUPER';
+  const isChairman = form.role === 'CHAIRMAN';
   const needsOrg = form.role === 'CEO' || form.role === 'USER';
   const needsUserType = form.role === 'USER';
 
@@ -255,7 +270,8 @@ function UserFormModal({ editUser, onClose, onSaved }) {
     setLoading(true);
     try {
       const payload = {
-        name: form.name, role: isSuper ? 'ADMIN' : form.role, isSuperAdmin: isSuper,
+        name: form.name, role: (isSuper || isChairman) ? 'ADMIN' : form.role, isSuperAdmin: isSuper,
+        viewOnly: isChairman,
         userType: form.role === 'USER' ? form.userType : null,
         jobTitle: form.jobTitle, phone: form.phone, linkedinUrl: form.linkedinUrl,
         skills: form.skills,
@@ -281,6 +297,12 @@ function UserFormModal({ editUser, onClose, onSaved }) {
           </Select>
           <Input label="Job title" value={form.jobTitle} onChange={(e) => setForm({ ...form, jobTitle: e.target.value })} placeholder="e.g. Manager" />
         </div>
+        {isChairman && (
+          <div className="flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm dark:border-amber-500/30 dark:bg-amber-500/10">
+            <Eye className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+            <span className="text-slate-600 dark:text-slate-300">A view-only oversight account (global). Sees all activity but cannot change anything.</span>
+          </div>
+        )}
         {needsUserType && (
           <Select label="User type" value={form.userType} onChange={(e) => setForm({ ...form, userType: e.target.value })}>
             {USER_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}

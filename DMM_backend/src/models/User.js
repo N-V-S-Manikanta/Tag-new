@@ -20,6 +20,10 @@ const userSchema = new mongoose.Schema(
     // The single built-in super admin. Only this account can create/edit other
     // admins, users and organizations. Seeded on startup; never set via the API.
     isSuperAdmin: { type: Boolean, default: false },
+    // View-only oversight account (e.g. the Chairman, NGI): sees all activity
+    // but cannot change anything. Enforced globally in the protect middleware,
+    // which blocks every non-GET request for these users.
+    viewOnly: { type: Boolean, default: false },
     // CEO and USER belong to one organization. ADMIN is global (organization = null).
     organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', default: null, index: true },
     avatar: { type: String, default: '' },

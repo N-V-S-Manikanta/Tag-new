@@ -1,4 +1,5 @@
 import axios from 'axios';
+import toast from 'react-hot-toast';
 
 // In dev, '/api' is proxied to the backend by Vite (see vite.config.js).
 // In production, set VITE_API_URL to the deployed backend, e.g.
@@ -23,6 +24,10 @@ api.interceptors.response.use(
       localStorage.removeItem('dmm_token');
       if (!window.location.pathname.startsWith('/login')) window.location.href = '/login';
     }
+    // View-only (Chairman) accounts are blocked from writes server-side — surface
+    // a friendly message instead of a raw error if a control slips through.
+    const msg = err.response?.data?.message || '';
+    if (err.response?.status === 403 && /view-only/i.test(msg)) toast.error(msg);
     return Promise.reject(err);
   }
 );

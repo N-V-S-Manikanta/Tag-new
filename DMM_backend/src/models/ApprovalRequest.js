@@ -56,11 +56,10 @@ const approvalRequestSchema = new mongoose.Schema(
     },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
 
-    // DESIGN brief: the coordinator picks the designer who does the work, and
-    // can flag whether the finished design is meant to be posted on social media
-    // (a hint for the approver, who still chooses the final route).
+    // DESIGN brief: the coordinator picks the designer who does the work and the
+    // intended delivery type (see deliveryMode below). The approver still chooses
+    // the final route at approval time.
     designer: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null, index: true },
-    needsPosting: { type: Boolean, default: false },
 
     // lifecycle timestamps
     submittedAt: { type: Date }, // when the designer submitted finished work
@@ -79,6 +78,10 @@ const approvalRequestSchema = new mongoose.Schema(
     // …and the POST request the handler raised from it (back-linked both ways).
     linkedPost: { type: mongoose.Schema.Types.ObjectId, ref: 'ApprovalRequest', default: null },
     sourceDesign: { type: mongoose.Schema.Types.ObjectId, ref: 'ApprovalRequest', default: null },
+    // How an approved design is delivered:
+    //   DIGITAL → allocated to a social handler who posts it to channels
+    //   PRINT   → delivered back to the coordinator to print / keep a copy
+    // Set by the coordinator on the brief (a hint) and finalized by the approver.
     deliveryMode: { type: String, enum: ['DIGITAL', 'PRINT'], default: 'DIGITAL' },
     forwardedTargets: [forwardTargetSchema],
     forwardedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },

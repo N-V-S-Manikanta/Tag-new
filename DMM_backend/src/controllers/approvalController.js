@@ -218,7 +218,7 @@ export const getApproval = asyncHandler(async (req, res) => {
 // DESIGN → a coordinator raises a brief and picks the designer (status IN_DESIGN).
 // POST   → standalone ready-to-publish content submitted for approval (status PENDING).
 export const createApproval = asyncHandler(async (req, res) => {
-  const { title, platform, caption, description, hashtags, order, aspectRatio, organization, type, sourceDesign, designer, needsPosting } = req.body;
+  const { title, platform, caption, description, hashtags, order, aspectRatio, organization, type, sourceDesign, designer, deliveryMode } = req.body;
   if (!title || !platform) { res.status(400); throw new Error('Title and platform are required'); }
   const reqType = type === APPROVAL_TYPES.DESIGN ? APPROVAL_TYPES.DESIGN : APPROVAL_TYPES.POST;
 
@@ -243,7 +243,7 @@ export const createApproval = asyncHandler(async (req, res) => {
       type: APPROVAL_TYPES.DESIGN,
       aspectRatio: aspectRatio || '',
       hashtags: parseHashtags(hashtags),
-      needsPosting: needsPosting === true || needsPosting === 'true',
+      deliveryMode: deliveryMode === 'PRINT' ? 'PRINT' : 'DIGITAL',
       designer: chosen._id,
       status: APPROVAL_STATUS.IN_DESIGN,
       createdBy: req.user._id,
@@ -594,7 +594,7 @@ export const assignRequest = asyncHandler(async (req, res) => {
   request.assignedTo = assignee._id;
   request.assignedBy = req.user._id;
   request.assignedAt = new Date();
-  request.needsPosting = true;
+  request.deliveryMode = 'DIGITAL'; // allocated for posting
   await request.save();
 
   await recordFeed({ request: request._id, kind: 'event', author: req.user._id, text: `allocated this design to ${assignee.name} to post on ${request.platform}` });
@@ -626,6 +626,7 @@ export const deliverToCoordinator = asyncHandler(async (req, res) => {
   request.status = APPROVAL_STATUS.DELIVERED;
   request.deliveredAt = new Date();
   request.deliveredBy = req.user._id;
+  request.deliveryMode = 'PRINT'; // delivered as a copy, not posted
   // Delivery is the non-post route — clear any prior handler allocation.
   request.assignedTo = null;
   request.assignedBy = null;

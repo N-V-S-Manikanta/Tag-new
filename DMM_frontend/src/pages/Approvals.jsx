@@ -53,7 +53,9 @@ export default function Approvals() {
   const navigate = useNavigate();
   const { user } = useAuthStore();
   const isSuperAdmin = !!user?.isSuperAdmin;
-  const isCoordinator = user?.role === 'USER' && user?.userType === 'COORDINATOR';
+  // Coordinators and principals (CEO) raise design briefs.
+  const canRaiseBrief = (user?.role === 'USER' && user?.userType === 'COORDINATOR') || user?.role === 'CEO';
+  const isViewer = !!user?.viewOnly;
   const [searchParams] = useSearchParams();
   // Allow the dashboard cards to deep-link into a pre-filtered view (?status=PENDING),
   // and design detail pages to open the composer prefilled (?compose=post&design=<id>).
@@ -95,7 +97,7 @@ export default function Approvals() {
       <PageHeader
         title={isSuperAdmin ? 'Approval Panel' : 'My Approval Requests'}
         subtitle={isSuperAdmin ? 'Review, approve or request changes to content.' : 'Create and track your content approvals.'}
-        actions={<Button onClick={() => setShowCreate(true)}><Plus className="h-4 w-4" /> {isCoordinator ? 'Raise design brief' : 'New Request'}</Button>}
+        actions={!isViewer && <Button onClick={() => setShowCreate(true)}><Plus className="h-4 w-4" /> {canRaiseBrief ? 'Raise design brief' : 'New Request'}</Button>}
       />
 
       {/* Pipeline switch: post approvals vs design approvals */}

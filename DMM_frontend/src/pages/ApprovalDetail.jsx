@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import {
   ArrowLeft, Check, X, Send, RefreshCw, Plus, Trash2, MessageSquareWarning,
   CheckCircle2, Hash, Play, Paperclip, FilePlus2, UserCheck, Palette,
+  Upload, Download, Share2, PackageCheck, Truck,
 } from 'lucide-react';
 import { approvalApi } from '../api/endpoints.js';
 import { useAuthStore } from '../store/authStore.js';
@@ -13,7 +14,9 @@ import { Card, Badge, Avatar, Skeleton, Input } from '../components/ui/primitive
 import { Modal } from '../components/ui/Modal.jsx';
 import FileDropzone from '../components/ui/FileDropzone.jsx';
 import ReviewAssist from '../components/approvals/ReviewAssist.jsx';
-import { cn, formatDate, formatDateTime, timeAgo, isVideo } from '../lib/utils.js';
+import { cn, formatDate, formatDateTime, timeAgo, isVideo, statusLabel } from '../lib/utils.js';
+
+const fileName = (u = '') => u.split('/').pop() || 'download';
 
 export default function ApprovalDetail() {
   const { id } = useParams();
@@ -27,6 +30,7 @@ export default function ApprovalDetail() {
   const [lightbox, setLightbox] = useState(null);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [resubmitOpen, setResubmitOpen] = useState(false);
+  const [submitOpen, setSubmitOpen] = useState(false);
 
   // Live-chat feel: poll every 3s while the page is open (paused when the tab
   // is in the background), so messages and status changes appear on both sides
@@ -38,7 +42,9 @@ export default function ApprovalDetail() {
     refetchIntervalInBackground: false,
   });
   const r = data?.request;
-  const isOwner = r && String(r.createdBy?._id) === String(user?._id);
+  const isOwner = r && String(r.createdBy?._id) === String(user?._id); // coordinator for a design
+  const isDesigner = r && String(r.designer?._id || r.designer || '') === String(user?._id);
+  const isHandler = r && String(r.assignedTo?._id || r.assignedTo || '') === String(user?._id);
 
   const invalidate = () => { qc.invalidateQueries({ queryKey: ['approval', id] }); qc.invalidateQueries({ queryKey: ['approvals'] }); };
 
@@ -61,10 +67,19 @@ export default function ApprovalDetail() {
   if (isLoading) return <div className="space-y-4"><Skeleton className="h-8 w-40" /><div className="grid gap-5 lg:grid-cols-3"><Skeleton className="h-96 lg:col-span-2" /><Skeleton className="h-96" /></div></div>;
   if (!r) return <p className="text-slate-400">Request not found.</p>;
 
-  const images = [...(r.images || [])].sort((a, b) => a.order - b.order);
+  const allImages = [...(r.images || [])].sort((a, b) => a.order - b.order);
+  const referenceImages = allImages.filter((i) => i.kind === 'reference');
+  const finalImages = allImages.filter((i) => i.kind !== 'reference');
+  // Main gallery shows the finished work; a brief before submission shows references.
+  const images = finalImages.length ? finalImages : allImages;
   // Clamp: a resubmission can shrink the list below the selected thumbnail index.
   const shownImg = images[Math.min(activeImg, images.length - 1)];
+  const isDesign = r.type === 'DESIGN';
   const canReview = privileged && ['PENDING', 'RESUBMITTED'].includes(r.status);
+  const canSubmitDesign = isDesign && isDesigner && r.status === 'IN_DESIGN';
+  const canResubmit = r.status === 'REJECTED' && (isDesign ? isDesigner : isOwner);
+  const canMarkPosted = r.status === 'APPROVED' && (isDesign ? isHandler : isOwner);
+  const canDownloadFinal = finalImages.length > 0 && ['APPROVED', 'POSTED', 'DELIVERED'].includes(r.status) && (isOwner || privileged || isDesigner || isHandler);
   const canDelete = isOwner || ['ADMIN', 'CEO'].includes(user?.role);
 
   return (
@@ -83,7 +98,7 @@ export default function ApprovalDetail() {
               : 'bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300'}>
               {r.type === 'DESIGN' ? 'Design' : 'Post'}
             </Badge>
-            <Badge status={r.status}>{r.status}</Badge>
+            <Badge status={r.status}>{statusLabel(r.status)}</Badge>
           </div>
           <p className="mt-1 text-sm text-slate-400">Request #{String(r._id).slice(-6).toUpperCase()} · Updated {formatDateTime(r.updatedAt)}</p>
         </div>
@@ -94,10 +109,13 @@ export default function ApprovalDetail() {
               <Button variant="danger" onClick={() => setRejectOpen(true)}><X className="h-4 w-4" /> Request changes</Button>
             </>
           )}
-          {isOwner && r.status === 'REJECTED' && (
-            <Button onClick={() => setResubmitOpen(true)}><RefreshCw className="h-4 w-4" /> Edit & Resubmit</Button>
+          {canSubmitDesign && (
+            <Button onClick={() => setSubmitOpen(true)}><Upload className="h-4 w-4" /> Upload &amp; submit design</Button>
           )}
-          {isOwner && r.status === 'APPROVED' && r.type !== 'DESIGN' && (
+          {canResubmit && (
+            <Button onClick={() => setResubmitOpen(true)}><RefreshCw className="h-4 w-4" /> Edit &amp; Resubmit</Button>
+          )}
+          {canMarkPosted && (
             <Button loading={postedMut.isPending} onClick={() => postedMut.mutate()}><Send className="h-4 w-4" /> Mark as Posted</Button>
           )}
           {canDelete && (
@@ -112,23 +130,34 @@ export default function ApprovalDetail() {
       <div className="grid gap-5 lg:grid-cols-3">
         {/* Left: lifecycle + assignment + details + media */}
         <div className="space-y-5 lg:col-span-2">
-          <LifecycleCard r={r} isOwner={isOwner} />
-          {r.type === 'DESIGN' && (
-            <AssignmentCard r={r} user={user} privileged={privileged} onChanged={invalidate} navigate={navigate} />
+          <LifecycleCard r={r} />
+          {isDesign && (
+            <RoutingCard r={r} user={user} privileged={privileged} isHandler={isHandler} onChanged={invalidate} />
           )}
           {/* Pre-approval AI quality check — posts awaiting a decision only */}
           {r.type !== 'DESIGN' && canReview && <ReviewAssist approvalId={id} />}
-          <PostDetailsCard r={r} navigate={navigate} />
+          <PostDetailsCard r={r} />
 
-          {/* Media gallery */}
+          {/* Media gallery — the finished work (or references before submission) */}
           <Card className="overflow-hidden">
-            <div className={`relative aspect-video bg-slate-100 dark:bg-slate-800 ${shownImg && !isVideo(shownImg) ? 'cursor-zoom-in' : ''}`}
+            <div className="flex items-center justify-between px-4 pt-3">
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
+                {isDesign ? (finalImages.length ? 'Final design' : 'Reference') : 'Media'}
+              </p>
+              {canDownloadFinal && shownImg && (
+                <a href={shownImg.url} download={fileName(shownImg.url)} target="_blank" rel="noreferrer"
+                  className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold text-brand-700 transition hover:bg-brand-50 dark:text-brand-300 dark:hover:bg-brand-500/10">
+                  <Download className="h-3.5 w-3.5" /> Download
+                </a>
+              )}
+            </div>
+            <div className={`relative mt-2 aspect-video bg-slate-100 dark:bg-slate-800 ${shownImg && !isVideo(shownImg) ? 'cursor-zoom-in' : ''}`}
               onClick={() => { if (shownImg && !isVideo(shownImg)) setLightbox(shownImg.url); }}>
               {shownImg ? (
                 isVideo(shownImg)
                   ? <video src={shownImg.url} controls className="h-full w-full object-contain" />
                   : <img src={shownImg.url} alt="" className="h-full w-full object-contain" />
-              ) : <div className="flex h-full items-center justify-center text-slate-300">No media</div>}
+              ) : <div className="flex h-full items-center justify-center text-slate-300">No media yet</div>}
             </div>
             {images.length > 1 && (
               <div className="flex gap-2 overflow-x-auto p-3">
@@ -143,6 +172,22 @@ export default function ApprovalDetail() {
               </div>
             )}
           </Card>
+
+          {/* Reference material the coordinator attached (once the final work exists) */}
+          {finalImages.length > 0 && referenceImages.length > 0 && (
+            <Card className="p-4">
+              <p className="mb-2.5 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-slate-400">
+                <Palette className="h-3.5 w-3.5 text-violet-500" /> Reference from coordinator
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {referenceImages.map((img) => (
+                  isVideo(img)
+                    ? <video key={img._id} src={img.url} className="h-20 w-20 rounded-lg object-cover" muted />
+                    : <img key={img._id} src={img.url} alt="" onClick={() => setLightbox(img.url)} className="h-20 w-20 cursor-zoom-in rounded-lg object-cover" />
+                ))}
+              </div>
+            </Card>
+          )}
         </div>
 
         {/* Right: activity chat */}
@@ -156,50 +201,72 @@ export default function ApprovalDetail() {
 
       {rejectOpen && <RejectModal id={id} onClose={() => setRejectOpen(false)} onDone={() => { setRejectOpen(false); invalidate(); }} />}
       {resubmitOpen && <ResubmitModal request={r} onClose={() => setResubmitOpen(false)} onDone={() => { setResubmitOpen(false); invalidate(); }} />}
+      {submitOpen && <SubmitDesignModal request={r} onClose={() => setSubmitOpen(false)} onDone={() => { setSubmitOpen(false); invalidate(); }} />}
     </div>
   );
 }
 
 // ---- Approval lifecycle ----
 // POST:   Submitted -> In review -> Approved -> Posted
-// DESIGN: Submitted -> In review -> Approved -> Assigned -> Posted (via linked post)
-function LifecycleCard({ r, isOwner }) {
+// DESIGN: Brief -> In design -> In review -> Approved -> Posted / Delivered
+function LifecycleCard({ r }) {
   const rejected = r.status === 'REJECTED';
   const resubmitted = r.status === 'RESUBMITTED';
-  const isDesign = r.type === 'DESIGN';
-  // Furthest stage reached (Submitted is always reached).
-  const stageIdx = isDesign
-    ? (r.status === 'POSTED' ? 4 : r.assignedTo ? 3 : r.status === 'APPROVED' ? 2 : 1)
-    : (r.status === 'POSTED' ? 3 : r.status === 'APPROVED' ? 2 : 1);
   const reviewStep = {
     label: rejected ? 'Changes requested' : resubmitted ? 'Back in review' : 'In review',
     date: r.resubmittedAt || r.rejectedAt,
     note: rejected ? (r.resubmitCount > 0 ? `${r.resubmitCount} resubmission${r.resubmitCount > 1 ? 's' : ''} so far` : 'Awaiting resubmission') : null,
     amber: rejected,
   };
-  const steps = isDesign
-    ? [
-        { label: 'Submitted', date: r.createdAt },
-        reviewStep,
-        { label: 'Approved', date: r.approvedAt },
-        { label: 'Assigned', date: r.assignedAt, note: r.assignedTo && stageIdx === 3 ? `to ${r.assignedTo?.name}` : null },
-        { label: 'Posted', date: r.postedAt },
-      ]
-    : [
-        { label: 'Submitted', date: r.createdAt },
-        reviewStep,
-        { label: 'Approved', date: r.approvedAt },
-        { label: 'Posted', date: r.postedAt },
-      ];
-  const percent = Math.round(((stageIdx + 1) / steps.length) * 100);
 
+  if (r.type === 'DESIGN') {
+    const finalLabel = r.status === 'POSTED' ? 'Posted' : r.status === 'DELIVERED' ? 'Delivered' : r.needsPosting ? 'Post' : 'Deliver';
+    const steps = [
+      { label: 'Brief', date: r.createdAt, note: r.designer?.name ? `to ${r.designer.name}` : null },
+      { label: 'In design', date: r.submittedAt },
+      reviewStep,
+      { label: 'Approved', date: r.approvedAt },
+      { label: finalLabel, date: r.postedAt || r.deliveredAt, note: r.status === 'DELIVERED' ? `to ${r.createdBy?.name || 'coordinator'}` : (r.status === 'POSTED' && r.assignedTo?.name ? `by ${r.assignedTo.name}` : null) },
+    ];
+    const stageIdx = ['POSTED', 'DELIVERED'].includes(r.status) ? 4
+      : r.status === 'APPROVED' ? 3
+      : ['PENDING', 'RESUBMITTED', 'REJECTED'].includes(r.status) ? 2
+      : 1; // IN_DESIGN
+    return <LifecycleBar steps={steps} stageIdx={stageIdx} cols={5} hint={<DesignHint r={r} />} />;
+  }
+
+  const steps = [
+    { label: 'Submitted', date: r.createdAt },
+    reviewStep,
+    { label: 'Approved', date: r.approvedAt },
+    { label: 'Posted', date: r.postedAt },
+  ];
+  const stageIdx = r.status === 'POSTED' ? 3 : r.status === 'APPROVED' ? 2 : 1;
+  return (
+    <LifecycleBar steps={steps} stageIdx={stageIdx} cols={4}
+      hint={r.status === 'APPROVED' ? <p className="mt-3 flex items-center gap-1.5 text-xs font-medium text-emerald-600"><CheckCircle2 className="h-4 w-4" /> Awaiting posting by {r.createdBy?.name || 'the submitter'}</p> : null} />
+  );
+}
+
+// Short contextual line under the DESIGN lifecycle bar.
+function DesignHint({ r }) {
+  if (r.status === 'IN_DESIGN') return <p className="mt-3 flex items-center gap-1.5 text-xs font-medium text-indigo-600 dark:text-indigo-400"><Palette className="h-4 w-4" /> {r.designer?.name || 'The designer'} is working on this brief</p>;
+  if (r.status === 'APPROVED' && !r.assignedTo) return <p className="mt-3 flex items-center gap-1.5 text-xs font-medium text-violet-600 dark:text-violet-400"><UserCheck className="h-4 w-4" /> Approved — {r.needsPosting ? 'allocate a handler to post it' : 'deliver it to the coordinator'}</p>;
+  if (r.status === 'APPROVED' && r.assignedTo) return <p className="mt-3 flex items-center gap-1.5 text-xs font-medium text-violet-600 dark:text-violet-400"><Send className="h-4 w-4" /> Allocated to {r.assignedTo?.name} — awaiting posting</p>;
+  if (r.status === 'DELIVERED') return <p className="mt-3 flex items-center gap-1.5 text-xs font-medium text-teal-600 dark:text-teal-400"><PackageCheck className="h-4 w-4" /> Delivered to {r.createdBy?.name || 'the coordinator'}</p>;
+  return null;
+}
+
+// Presentational stepper shared by both request types.
+function LifecycleBar({ steps, stageIdx, cols, hint }) {
+  const percent = Math.round(((stageIdx + 1) / steps.length) * 100);
   return (
     <Card className="p-5">
       <div className="mb-5 flex items-center justify-between">
         <h3 className="font-bold text-slate-800 dark:text-white">Approval lifecycle</h3>
         <span className="text-sm font-semibold text-brand-600">{percent}% complete</span>
       </div>
-      <div className={cn('grid', isDesign ? 'grid-cols-5' : 'grid-cols-4')}>
+      <div className={cn('grid', cols === 5 ? 'grid-cols-5' : 'grid-cols-4')}>
         {steps.map((s, i) => {
           const done = i < stageIdx;
           const current = i === stageIdx;
@@ -222,7 +289,7 @@ function LifecycleCard({ r, isOwner }) {
                 {s.label}
               </p>
               {(done || current) && s.date && <p className="mt-0.5 text-[11px] text-slate-400">{formatDate(s.date)}</p>}
-              {current && s.note && <p className={cn('mt-0.5 text-[11px]', s.amber ? 'text-amber-600' : 'text-slate-400')}>{s.note}</p>}
+              {(done || current) && s.note && <p className={cn('mt-0.5 text-[11px]', s.amber ? 'text-amber-600' : 'text-slate-400')}>{s.note}</p>}
             </div>
           );
         })}
@@ -230,15 +297,7 @@ function LifecycleCard({ r, isOwner }) {
       <div className="mt-5 h-1.5 rounded-full bg-slate-100 dark:bg-slate-800">
         <div className="h-full rounded-full bg-brand-500 transition-all" style={{ width: `${percent}%` }} />
       </div>
-      {r.status === 'APPROVED' && !isOwner && r.type !== 'DESIGN' && (
-        <p className="mt-3 flex items-center gap-1.5 text-xs font-medium text-emerald-600"><CheckCircle2 className="h-4 w-4" /> Awaiting posting by {r.createdBy?.name || 'the submitter'}</p>
-      )}
-      {r.type === 'DESIGN' && r.status === 'APPROVED' && !r.assignedTo && (
-        <p className="mt-3 flex items-center gap-1.5 text-xs font-medium text-violet-600 dark:text-violet-400"><UserCheck className="h-4 w-4" /> Ready to be assigned to a {r.platform} handler</p>
-      )}
-      {r.type === 'DESIGN' && r.assignedTo && !r.linkedPost && r.status !== 'POSTED' && (
-        <p className="mt-3 flex items-center gap-1.5 text-xs font-medium text-violet-600 dark:text-violet-400"><UserCheck className="h-4 w-4" /> Waiting for {r.assignedTo?.name} to raise the post request</p>
-      )}
+      {hint}
     </Card>
   );
 }
@@ -267,137 +326,129 @@ function HandlerRow({ h, matched = false, selected, onSelect }) {
   );
 }
 
-function AssignmentCard({ r, user, privileged, onChanged, navigate }) {
+function RoutingCard({ r, privileged, isHandler, onChanged }) {
   const orgId = r.organization?._id || r.organization;
-  const isAssignee = r.assignedTo && String(r.assignedTo._id || r.assignedTo) === String(user?._id);
-  const forwardedTargets = r.forwardedTargets || [];
-  const hasUser = (arr) => (arr || []).some((h) => String(h?._id || h) === String(user?._id));
-  const myForwardTargets = forwardedTargets.filter((t) => hasUser(t.handlers));
-  const isForwardedHandler = myForwardTargets.length > 0;
-  const canAssign = privileged && r.status === 'APPROVED' && !r.linkedPost;
-  const canCreatePost = (isAssignee || isForwardedHandler) && !r.linkedPost && r.status === 'APPROVED';
-  const [picking, setPicking] = useState(false);
+  const [mode, setMode] = useState(null); // 'allocate' | null
   const [selected, setSelected] = useState('');
-  const choosing = canAssign && (picking || !r.assignedTo);
 
   const { data: handlerData, isLoading } = useQuery({
     queryKey: ['handlers', String(orgId), r.platform],
     queryFn: () => approvalApi.handlers(orgId, r.platform),
-    enabled: choosing,
+    enabled: mode === 'allocate',
   });
-  const handlers = handlerData?.handlers || [];
-  const fallback = handlerData?.fallback || [];
+  // Both lists are social handlers (see /users/handlers); declared ones (mapped
+  // to this platform) get a badge, the rest are still valid allocation targets.
+  const declaredIds = new Set((handlerData?.handlers || []).map((h) => String(h._id)));
+  const seenHandler = new Set();
+  const handlers = [...(handlerData?.handlers || []), ...(handlerData?.fallback || [])]
+    .filter((h) => h?._id && !seenHandler.has(String(h._id)) && seenHandler.add(String(h._id)));
 
   const assignMut = useMutation({
     mutationFn: (userId) => approvalApi.assign(r._id, userId),
-    onSuccess: () => { toast.success('Design assigned'); setPicking(false); setSelected(''); onChanged(); },
-    onError: (e) => toast.error(e.response?.data?.message || 'Failed to assign'),
+    onSuccess: () => { toast.success('Allocated to handler'); setMode(null); setSelected(''); onChanged(); },
+    onError: (e) => toast.error(e.response?.data?.message || 'Failed to allocate'),
+  });
+  const deliverMut = useMutation({
+    mutationFn: () => approvalApi.deliver(r._id),
+    onSuccess: () => { toast.success('Delivered to coordinator'); onChanged(); },
+    onError: (e) => toast.error(e.response?.data?.message || 'Failed to deliver'),
   });
 
-  if (!r.assignedTo && !canAssign && forwardedTargets.length === 0) return null;
+  // Nothing to route before approval — the approve/reject controls are in the header.
+  if (['PENDING', 'RESUBMITTED', 'REJECTED'].includes(r.status)) return null;
 
+  if (r.status === 'IN_DESIGN') {
+    return (
+      <Card className="p-5">
+        <h3 className="mb-3 flex items-center gap-2 font-bold text-slate-800 dark:text-white"><Palette className="h-4 w-4 text-indigo-500" /> Design in progress</h3>
+        <div className="flex items-center gap-3">
+          <Avatar src={r.designer?.avatar} name={r.designer?.name} size="md" />
+          <div>
+            <p className="text-sm font-semibold text-slate-800 dark:text-white">{r.designer?.name || 'Designer'}</p>
+            <p className="text-xs text-slate-400">is working on this brief for {r.platform}</p>
+          </div>
+        </div>
+      </Card>
+    );
+  }
+
+  if (r.status === 'DELIVERED') {
+    return (
+      <Card className="p-5">
+        <h3 className="mb-3 flex items-center gap-2 font-bold text-slate-800 dark:text-white"><PackageCheck className="h-4 w-4 text-teal-500" /> Delivered</h3>
+        <p className="text-sm text-slate-600 dark:text-slate-300">Delivered to <span className="font-semibold">{r.createdBy?.name || 'the coordinator'}</span>{r.deliveredAt ? ` on ${formatDate(r.deliveredAt)}` : ''}. The final design can be downloaded above.</p>
+      </Card>
+    );
+  }
+
+  if (r.status === 'POSTED') {
+    return (
+      <Card className="p-5">
+        <h3 className="mb-3 flex items-center gap-2 font-bold text-slate-800 dark:text-white"><Send className="h-4 w-4 text-violet-500" /> Posted</h3>
+        <div className="flex items-center gap-3">
+          <Avatar src={r.assignedTo?.avatar} name={r.assignedTo?.name || r.postedBy?.name} size="md" />
+          <div>
+            <p className="text-sm font-semibold text-slate-800 dark:text-white">{r.assignedTo?.name || r.postedBy?.name || 'Handler'}</p>
+            <p className="text-xs text-slate-400">posted on {r.platform}{r.postedAt ? ` · ${formatDate(r.postedAt)}` : ''}</p>
+          </div>
+        </div>
+      </Card>
+    );
+  }
+
+  // APPROVED — the approver routes it (or others see the current routing state).
+  const allocated = !!r.assignedTo;
   return (
     <Card className="p-5">
       <div className="mb-4 flex items-center justify-between">
-        <h3 className="flex items-center gap-2 font-bold text-slate-800 dark:text-white">
-          <UserCheck className="h-4 w-4 text-violet-500" /> Assignment & forwarding
-        </h3>
-        {r.assignedTo && canAssign && !picking && (
-          <button onClick={() => setPicking(true)} className="text-sm font-medium text-brand-700 hover:text-brand-800 dark:text-brand-400 dark:hover:text-brand-300">
-            Reassign
-          </button>
-        )}
+        <h3 className="flex items-center gap-2 font-bold text-slate-800 dark:text-white"><Share2 className="h-4 w-4 text-brand-500" /> Route this design</h3>
+        {r.needsPosting
+          ? <span className="rounded-full bg-brand-50 px-2 py-0.5 text-[11px] font-semibold text-brand-700 dark:bg-brand-500/15 dark:text-brand-300">Coordinator asked to post</span>
+          : <span className="rounded-full bg-teal-50 px-2 py-0.5 text-[11px] font-semibold text-teal-700 dark:bg-teal-500/15 dark:text-teal-300">Coordinator wants delivery</span>}
       </div>
 
-      {r.assignedTo && !choosing && (
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <Avatar src={r.assignedTo?.avatar} name={r.assignedTo?.name} size="md" />
-            <div>
-              <p className="text-sm font-semibold text-slate-800 dark:text-white">{r.assignedTo?.name}</p>
-              <p className="text-xs text-slate-400">
-                {r.platform} handler · assigned {formatDate(r.assignedAt)}{r.assignedBy?.name ? ` by ${r.assignedBy.name}` : ''}
-              </p>
-            </div>
+      {allocated && mode !== 'allocate' && (
+        <div className="mb-4 flex items-center gap-3 rounded-xl border border-slate-200 p-3 dark:border-slate-700">
+          <Avatar src={r.assignedTo?.avatar} name={r.assignedTo?.name} size="md" />
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold text-slate-800 dark:text-white">{r.assignedTo?.name}</p>
+            <p className="text-xs text-slate-400">Allocated to post on {r.platform}{isHandler ? ' · that’s you — mark it posted from the top' : ''}</p>
           </div>
-          {canCreatePost && (
-            <Button size="sm" onClick={() => navigate(`/approvals?compose=post&design=${r._id}`)}>
-              <FilePlus2 className="h-4 w-4" /> Create post request
-            </Button>
-          )}
-          {r.linkedPost && (
-            <Button size="sm" variant="outline" onClick={() => navigate(`/approvals/${r.linkedPost._id || r.linkedPost}`)}>
-              <Send className="h-4 w-4" /> View post request
-              {r.linkedPost.status && <Badge status={r.linkedPost.status}>{r.linkedPost.status}</Badge>}
-            </Button>
-          )}
         </div>
       )}
 
-      {forwardedTargets.length > 0 && !choosing && (
-        <div className={cn('space-y-2', r.assignedTo && 'mt-4 border-t border-slate-100 pt-4 dark:border-slate-800')}>
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Forwarded digital targets</p>
-          {forwardedTargets.map((t, idx) => {
-            const mine = hasUser(t.handlers);
-            return (
-              <div key={`${t.organization?._id || t.organization}-${t.platform}-${idx}`} className={cn('rounded-xl border p-3', mine ? 'border-brand-300 bg-brand-50/50 dark:border-brand-500/40 dark:bg-brand-500/10' : 'border-slate-100 dark:border-slate-800')}>
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">{t.organization?.name || 'Organization'} · {t.platform}</p>
-                  {mine && <span className="rounded-full bg-brand-100 px-2 py-0.5 text-[11px] font-semibold text-brand-700 dark:bg-brand-500/20 dark:text-brand-300">Assigned to you</span>}
-                </div>
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {(t.handlers || []).map((h) => (
-                    <span key={h._id || h} className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                      <Avatar src={h.avatar} name={h.name} size="sm" className="h-4 w-4 text-[9px]" />
-                      {h.name || 'Handler'}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {choosing && (
+      {!privileged ? (
+        !allocated && <p className="text-sm text-slate-400">Approved — waiting for the branding team to route it.</p>
+      ) : mode === 'allocate' ? (
         <div>
-          <p className="mb-3 text-sm text-slate-500 dark:text-slate-400">
-            Pick who publishes on <span className="font-semibold">{r.platform}</span> for {r.organization?.name || 'this organization'}.
-          </p>
-          {isLoading ? (
-            <Skeleton className="h-24" />
+          <p className="mb-3 text-sm text-slate-500 dark:text-slate-400">Pick the social handler who publishes on <span className="font-semibold">{r.platform}</span> for {r.organization?.name || 'this organization'}.</p>
+          {isLoading ? <Skeleton className="h-24" /> : handlers.length === 0 ? (
+            <p className="rounded-xl border border-dashed border-slate-200 p-4 text-sm text-slate-400 dark:border-slate-700">No social handlers are mapped to {r.platform} for this organization yet — ask them to add the pages they handle in My Profile.</p>
           ) : (
-            <>
-              {handlers.length === 0 && fallback.length === 0 && (
-                <p className="rounded-xl border border-dashed border-slate-200 p-4 text-sm text-slate-400 dark:border-slate-700">
-                  No team members found for this organization yet — ask them to add the pages they handle in My Profile.
-                </p>
-              )}
-              {handlers.length > 0 && (
-                <div className="space-y-2">
-                  {handlers.map((h) => <HandlerRow key={h._id} h={h} matched selected={selected === h._id} onSelect={() => setSelected(h._id)} />)}
-                </div>
-              )}
-              {fallback.length > 0 && (
-                <>
-                  <p className={cn('mb-2 text-[11px] font-bold uppercase tracking-wide text-slate-400', handlers.length > 0 && 'mt-4')}>
-                    {handlers.length > 0 ? 'Other team members' : `No declared ${r.platform} handlers — other team members`}
-                  </p>
-                  <div className="space-y-2">
-                    {fallback.map((h) => <HandlerRow key={h._id} h={h} selected={selected === h._id} onSelect={() => setSelected(h._id)} />)}
-                  </div>
-                </>
-              )}
-              {(handlers.length > 0 || fallback.length > 0) && (
-                <div className="mt-4 flex justify-end gap-2">
-                  {r.assignedTo && <Button variant="outline" size="sm" onClick={() => { setPicking(false); setSelected(''); }}>Cancel</Button>}
-                  <Button size="sm" disabled={!selected} loading={assignMut.isPending} onClick={() => assignMut.mutate(selected)}>
-                    <UserCheck className="h-4 w-4" /> Assign design
-                  </Button>
-                </div>
-              )}
-            </>
+            <div className="space-y-2">
+              {handlers.map((h) => <HandlerRow key={h._id} h={h} matched={declaredIds.has(String(h._id))} selected={selected === h._id} onSelect={() => setSelected(h._id)} />)}
+            </div>
           )}
+          <div className="mt-4 flex justify-end gap-2">
+            <Button variant="outline" size="sm" onClick={() => { setMode(null); setSelected(''); }}>Cancel</Button>
+            <Button size="sm" disabled={!selected} loading={assignMut.isPending} onClick={() => assignMut.mutate(selected)}><UserCheck className="h-4 w-4" /> Allocate</Button>
+          </div>
+        </div>
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <button type="button" onClick={() => setMode('allocate')}
+            className={cn('rounded-2xl border-2 p-4 text-left transition', r.needsPosting ? 'border-brand-500 bg-brand-50/60 dark:bg-brand-500/10' : 'border-slate-200 hover:border-brand-300 dark:border-slate-700')}>
+            <Share2 className={cn('h-5 w-5', r.needsPosting ? 'text-brand-600 dark:text-brand-400' : 'text-slate-400')} />
+            <p className="mt-2 text-sm font-bold text-slate-800 dark:text-white">{allocated ? 'Re-allocate handler' : 'Allocate to social handler'}</p>
+            <p className="mt-0.5 text-xs text-slate-400">A handler posts it on {r.platform}.</p>
+          </button>
+          <button type="button" disabled={deliverMut.isPending}
+            onClick={() => window.confirm('Deliver the final design to the coordinator? This closes the request without posting.') && deliverMut.mutate()}
+            className={cn('rounded-2xl border-2 p-4 text-left transition disabled:opacity-60', !r.needsPosting ? 'border-teal-500 bg-teal-50/60 dark:bg-teal-500/10' : 'border-slate-200 hover:border-teal-300 dark:border-slate-700')}>
+            <Truck className={cn('h-5 w-5', !r.needsPosting ? 'text-teal-600 dark:text-teal-400' : 'text-slate-400')} />
+            <p className="mt-2 text-sm font-bold text-slate-800 dark:text-white">Deliver to coordinator</p>
+            <p className="mt-0.5 text-xs text-slate-400">Send the final file back to {r.createdBy?.name || 'the coordinator'}.</p>
+          </button>
         </div>
       )}
     </Card>
@@ -412,38 +463,40 @@ const Def = ({ label, value }) => (
   </div>
 );
 
-function PostDetailsCard({ r, navigate }) {
+function PostDetailsCard({ r }) {
+  const isDesign = r.type === 'DESIGN';
   return (
     <Card className="p-5">
-      <h3 className="mb-4 font-bold text-slate-800 dark:text-white">{r.type === 'DESIGN' ? 'Design details' : 'Post details'}</h3>
+      <h3 className="mb-4 font-bold text-slate-800 dark:text-white">{isDesign ? 'Design details' : 'Post details'}</h3>
       <div className="grid gap-4 sm:grid-cols-2">
         <Def label="Organization" value={r.organization?.name || '—'} />
         <Def label="Platform" value={<Badge>{r.platform}</Badge>} />
-        {r.sourceDesign && (
-          <Def label="Created from design" value={
-            <button onClick={() => navigate(`/approvals/${r.sourceDesign._id || r.sourceDesign}`)}
-              className="inline-flex items-center gap-1.5 font-medium text-violet-600 hover:text-violet-700 dark:text-violet-400 dark:hover:text-violet-300">
-              <Palette className="h-3.5 w-3.5" /> {r.sourceDesign?.title || 'View design'}
-            </button>
-          } />
-        )}
-        {r.type === 'DESIGN' && r.linkedPost && (
-          <Def label="Post request" value={
-            <button onClick={() => navigate(`/approvals/${r.linkedPost._id || r.linkedPost}`)}
-              className="inline-flex items-center gap-1.5 font-medium text-violet-600 hover:text-violet-700 dark:text-violet-400 dark:hover:text-violet-300">
-              <Send className="h-3.5 w-3.5" /> {r.linkedPost?.title || 'View post'}
-            </button>
-          } />
-        )}
         <Def label="Aspect ratio" value={r.aspectRatio || '—'} />
-        <Def label="Submitted by" value={
+        {isDesign && (
+          <Def label="Needs posting" value={r.needsPosting
+            ? <span className="inline-flex items-center gap-1 font-semibold text-brand-600 dark:text-brand-400"><Share2 className="h-3.5 w-3.5" /> Yes — post on social</span>
+            : <span className="inline-flex items-center gap-1 font-semibold text-teal-600 dark:text-teal-400"><PackageCheck className="h-3.5 w-3.5" /> No — deliver to coordinator</span>} />
+        )}
+        <Def label={isDesign ? 'Raised by (coordinator)' : 'Submitted by'} value={
           <span className="flex items-center gap-2">
             <Avatar src={r.createdBy?.avatar} name={r.createdBy?.name} size="sm" />
             <span>{r.createdBy?.name || '—'}</span>
           </span>
         } />
-        <Def label="Submitted on" value={formatDateTime(r.createdAt)} />
+        {isDesign && r.designer && (
+          <Def label="Designer" value={
+            <span className="flex items-center gap-2"><Avatar src={r.designer?.avatar} name={r.designer?.name} size="sm" /><span>{r.designer?.name}</span></span>
+          } />
+        )}
+        {isDesign && r.assignedTo && (
+          <Def label="Social handler" value={
+            <span className="flex items-center gap-2"><Avatar src={r.assignedTo?.avatar} name={r.assignedTo?.name} size="sm" /><span>{r.assignedTo?.name}</span></span>
+          } />
+        )}
+        <Def label={isDesign ? 'Raised on' : 'Submitted on'} value={formatDateTime(r.createdAt)} />
+        {isDesign && r.submittedAt && <Def label="Design submitted" value={formatDateTime(r.submittedAt)} />}
         {r.approvedAt && <Def label={`Approved${r.approvedBy?.name ? ` by ${r.approvedBy.name}` : ''}`} value={formatDateTime(r.approvedAt)} />}
+        {r.deliveredAt && <Def label={`Delivered${r.deliveredBy?.name ? ` by ${r.deliveredBy.name}` : ''}`} value={formatDateTime(r.deliveredAt)} />}
         {r.postedAt && <Def label="Posted on" value={formatDateTime(r.postedAt)} />}
         {r.resubmitCount > 0 && <Def label="Resubmissions" value={r.resubmitCount} />}
       </div>
@@ -737,6 +790,57 @@ function ResubmitModal({ request, onClose, onDone }) {
         <div className="flex justify-end gap-2">
           <Button variant="outline" onClick={onClose}>Cancel</Button>
           <Button loading={loading} onClick={submit}><RefreshCw className="h-4 w-4" /> Resubmit</Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+// ---- Designer submits the finished work for their assigned brief ----
+function SubmitDesignModal({ request, onClose, onDone }) {
+  const [form, setForm] = useState({
+    caption: request.caption || '', description: request.description || '',
+    hashtags: (request.hashtags || []).join(', '), aspectRatio: request.aspectRatio || '1:1',
+  });
+  const [images, setImages] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  const submit = async () => {
+    if (images.length === 0) { toast.error('Upload the finished design first'); return; }
+    setLoading(true);
+    try {
+      const fd = new FormData();
+      fd.append('caption', form.caption);
+      fd.append('description', form.description);
+      fd.append('hashtags', form.hashtags);
+      fd.append('aspectRatio', form.aspectRatio);
+      images.forEach((img, i) => { fd.append('images', img); fd.append('order', i); });
+      await approvalApi.submitDesign(request._id, fd);
+      toast.success('Design submitted for approval');
+      onDone();
+    } catch (e) { toast.error(e.response?.data?.message || 'Failed'); }
+    finally { setLoading(false); }
+  };
+
+  return (
+    <Modal open onClose={onClose} title="Upload & submit design" size="lg">
+      <div className="space-y-4">
+        {(request.description || request.caption) && (
+          <div className="rounded-xl border border-violet-200 bg-violet-50/60 p-3 text-sm dark:border-violet-500/30 dark:bg-violet-500/10">
+            <p className="mb-1 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-violet-600 dark:text-violet-300"><Palette className="h-3.5 w-3.5" /> Brief from {request.createdBy?.name || 'coordinator'}</p>
+            {request.description && <p className="whitespace-pre-wrap text-slate-600 dark:text-slate-300">{request.description}</p>}
+          </div>
+        )}
+        <div>
+          <span className="mb-1.5 block text-sm font-medium text-slate-600 dark:text-slate-300">Finished design (images / videos)</span>
+          <FileDropzone multiple reorderable accept="image/*,video/*" files={images} onChange={setImages} label="Drop the finished design here" />
+        </div>
+        <textarea className="input-base min-h-[70px]" placeholder="Caption (optional)" value={form.caption} onChange={(e) => setForm({ ...form, caption: e.target.value })} />
+        <textarea className="input-base min-h-[70px]" placeholder="Notes for the approver (optional)" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+        <Input label="Hashtags" value={form.hashtags} onChange={(e) => setForm({ ...form, hashtags: e.target.value })} />
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button loading={loading} onClick={submit}><Upload className="h-4 w-4" /> Submit for approval</Button>
         </div>
       </div>
     </Modal>

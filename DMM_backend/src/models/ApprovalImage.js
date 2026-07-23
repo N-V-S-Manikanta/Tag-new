@@ -10,6 +10,9 @@ const approvalImageSchema = new mongoose.Schema(
     url: { type: String, required: true },
     publicId: { type: String, default: '' },
     mediaType: { type: String, enum: ['image', 'video'], default: 'image' },
+    // 'reference' = brief material a coordinator attached; 'final' = the finished
+    // design/media submitted for approval. Standalone POST media is 'final'.
+    kind: { type: String, enum: ['reference', 'final'], default: 'final' },
     order: { type: Number, default: 0 },
   },
   { timestamps: true }

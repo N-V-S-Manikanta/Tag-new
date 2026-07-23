@@ -42,6 +42,7 @@ export const useAuthStore = create(
       isAdmin: () => get().user?.role === 'ADMIN',
       isDesigner: () => get().user?.role === 'USER' && get().user?.userType === 'DESIGNER',
       isSocialHandler: () => get().user?.role === 'USER' && get().user?.userType === 'SOCIAL_HANDLER',
+      isCoordinator: () => get().user?.role === 'USER' && get().user?.userType === 'COORDINATOR',
       // Admin + CEO get cross-org visibility (see all content/analytics).
       isPrivileged: () => ['ADMIN', 'CEO'].includes(get().user?.role),
     }),

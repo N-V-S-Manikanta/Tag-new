@@ -139,15 +139,21 @@ export const approvalApi = {
   get: (id) => api.get(`/approvals/${id}`).then((r) => r.data),
   create: (formData) =>
     api.post('/approvals', formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data),
+  // Designer uploads the finished design for their assigned brief (IN_DESIGN → PENDING).
+  submitDesign: (id, formData) =>
+    api.put(`/approvals/${id}/submit-design`, formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data),
   approve: (id) => api.put(`/approvals/${id}/approve`).then((r) => r.data),
   reject: (id, feedbackPoints) => api.put(`/approvals/${id}/reject`, { feedbackPoints }).then((r) => r.data),
   resubmit: (id, formData) =>
     api.put(`/approvals/${id}/resubmit`, formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data),
   markPosted: (id) => api.put(`/approvals/${id}/posted`).then((r) => r.data),
-  // Design → post pipeline: hand an approved design to a platform handler.
+  // Post route: allocate an approved design to a social handler who will post it.
   assign: (id, userId) => api.put(`/approvals/${id}/assign`, { userId }).then((r) => r.data),
+  // Deliver route: hand an approved design back to the coordinator (no posting).
+  deliver: (id) => api.put(`/approvals/${id}/deliver`).then((r) => r.data),
   forward: (id, targets) => api.put(`/approvals/${id}/forward`, { targets }).then((r) => r.data),
   handlers: (organizationId, platform) => api.get('/users/handlers', { params: { organizationId, platform } }).then((r) => r.data),
+  designers: () => api.get('/users/designers').then((r) => r.data),
   comment: (id, formData) =>
     api.post(`/approvals/${id}/comments`, formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data),
   remove: (id) => api.delete(`/approvals/${id}`).then((r) => r.data),

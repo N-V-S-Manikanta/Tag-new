@@ -69,9 +69,11 @@ const parseHandles = async (raw) => {
 // ============================ ADMIN ============================
 
 // @route GET /api/users/handlers?organizationId=&platform=  (ADMIN/CEO)
-// Who can publish for an organization: users whose profile handles declare
-// that org (+ platform when given). `fallback` lists the org's other active
-// members so a design can still be assigned when nobody declared the platform.
+// Who can publish for an organization: social handlers whose profile handles
+// declare that org (+ platform when given). `fallback` lists the org's OTHER
+// active social handlers (who didn't declare this platform) so an approved
+// design can still be allocated. Both lists are social handlers, so every
+// entry is a valid allocation target for the design-approval flow.
 export const listHandlers = asyncHandler(async (req, res) => {
   const { organizationId, platform } = req.query;
   if (!organizationId) { res.status(400); throw new Error('organizationId is required'); }
@@ -89,13 +91,29 @@ export const listHandlers = asyncHandler(async (req, res) => {
     .lean();
 
   const matched = new Set(handlers.map((u) => String(u._id)));
-  const fallback = await User.find({ isActive: true, organization: organizationId })
+  const fallback = await User.find({
+    isActive: true,
+    organization: organizationId,
+    role: ROLES.USER,
+    userType: USER_TYPES.SOCIAL_HANDLER,
+  })
     .select('name email avatar role')
     .sort({ name: 1 })
     .lean()
     .then((users) => users.filter((u) => !matched.has(String(u._id))));
 
   res.json({ success: true, handlers, fallback });
+});
+
+// @route GET /api/users/designers  — active designers a coordinator can pick to
+// work on a design brief. Central pool, not org-scoped (a designer serves any org).
+export const listDesigners = asyncHandler(async (req, res) => {
+  const designers = await User.find({ isActive: true, role: ROLES.USER, userType: USER_TYPES.DESIGNER })
+    .select('name email avatar skills tools organization')
+    .populate('organization', 'name color')
+    .sort({ name: 1 })
+    .lean();
+  res.json({ success: true, designers });
 });
 
 // @route GET /api/users  (ADMIN) — list with search + role + organization filter

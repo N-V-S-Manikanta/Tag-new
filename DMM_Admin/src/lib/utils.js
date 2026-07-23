@@ -61,11 +61,20 @@ export const ROLE_STYLES = {
   USER: 'bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-400',
 };
 
+// Display labels for the USER sub-types (userType enum).
+const USER_TYPE_LABELS = {
+  DESIGNER: 'Designer',
+  SOCIAL_HANDLER: 'Social Handler',
+  COORDINATOR: 'Coordinator',
+};
+export const userTypeLabel = (t) => USER_TYPE_LABELS[t] || 'Designer';
+
 // Three tiers shown to people: Super Admin → Admin (org manager, stored as CEO)
-// → User. The internal role enum stays ADMIN/CEO/USER.
+// → User. The internal role enum stays ADMIN/CEO/USER; a USER is further
+// distinguished by its userType (designer / social handler / coordinator).
 export const roleLabel = (u) => {
   if (u?.isSuperAdmin) return 'Super Admin';
-  if (u?.role === 'USER') return u?.userType === 'SOCIAL_HANDLER' ? 'Social Handler' : 'Designer';
+  if (u?.role === 'USER') return userTypeLabel(u?.userType);
   return 'Admin';
 };
 export const roleStyle = (u) =>

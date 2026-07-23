@@ -135,8 +135,12 @@ export const approvalApi = {
   get: (id) => api.get(`/approvals/${id}`).then((r) => r.data),
   approve: (id) => api.put(`/approvals/${id}/approve`).then((r) => r.data),
   reject: (id, feedbackPoints) => api.put(`/approvals/${id}/reject`, { feedbackPoints }).then((r) => r.data),
-  // Design → post pipeline: hand an approved design to a platform handler.
+  // Design routing (super admin, status APPROVED): allocate an approved design
+  // to a social handler who will post it.
   assign: (id, userId) => api.put(`/approvals/${id}/assign`, { userId }).then((r) => r.data),
+  // Design routing (super admin, status APPROVED): deliver the approved design
+  // back to the coordinator who raised it (terminal).
+  deliver: (id) => api.put(`/approvals/${id}/deliver`).then((r) => r.data),
   forward: (id, targets) => api.put(`/approvals/${id}/forward`, { targets }).then((r) => r.data),
   handlers: (organizationId, platform) => api.get('/users/handlers', { params: { organizationId, platform } }).then((r) => r.data),
   comment: (id, formData) =>

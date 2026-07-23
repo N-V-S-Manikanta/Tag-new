@@ -14,18 +14,22 @@ import { Card, Input, Select, Badge, Avatar, Skeleton, EmptyState } from '../com
 import CreateApprovalModal from '../components/approvals/CreateApprovalModal.jsx';
 import { cn, formatDate, isVideo } from '../lib/utils.js';
 
-const STATUSES = ['All', 'PENDING', 'RESUBMITTED', 'APPROVED', 'REJECTED', 'POSTED'];
+// Design briefs move through an extra IN_DESIGN stage and can end DELIVERED;
+// standalone posts don't, so each pipeline shows its own status tabs.
+const STATUSES_POST = ['All', 'PENDING', 'RESUBMITTED', 'APPROVED', 'REJECTED', 'POSTED'];
+const STATUSES_DESIGN = ['All', 'IN_DESIGN', 'PENDING', 'RESUBMITTED', 'APPROVED', 'REJECTED', 'POSTED', 'DELIVERED'];
+const ALL_STATUSES = [...new Set([...STATUSES_POST, ...STATUSES_DESIGN])];
 const PLATFORMS = ['All', 'LinkedIn', 'Instagram', 'YouTube', 'Facebook'];
 
-// The two approval pipelines. POST = ready-to-publish content. DESIGN =
-// creative work that, once approved, is assigned to a platform handler who
-// then raises the linked post request.
+// The two approval pipelines. POST = ready-to-publish content. DESIGN = a brief
+// a coordinator raises; a designer creates it, a super admin approves, then it
+// is either posted by a social handler or delivered back to the coordinator.
 const TYPE_TABS = [
   { key: 'POST', label: 'Post approvals', icon: Send },
   { key: 'DESIGN', label: 'Design approvals', icon: Palette },
 ];
 
-const STATUS_LABELS = { All: 'All', PENDING: 'Pending', RESUBMITTED: 'Resubmitted', APPROVED: 'Approved', REJECTED: 'Rejected', POSTED: 'Posted' };
+const STATUS_LABELS = { All: 'All', IN_DESIGN: 'In design', PENDING: 'Pending', RESUBMITTED: 'Resubmitted', APPROVED: 'Approved', REJECTED: 'Rejected', POSTED: 'Posted', DELIVERED: 'Delivered' };
 
 // Stat tiles across the top — each doubles as a shortcut to its status tab.
 const TILES = [
@@ -49,10 +53,11 @@ export default function Approvals() {
   const navigate = useNavigate();
   const { user } = useAuthStore();
   const isSuperAdmin = !!user?.isSuperAdmin;
+  const isCoordinator = user?.role === 'USER' && user?.userType === 'COORDINATOR';
   const [searchParams] = useSearchParams();
   // Allow the dashboard cards to deep-link into a pre-filtered view (?status=PENDING),
   // and design detail pages to open the composer prefilled (?compose=post&design=<id>).
-  const initialStatus = STATUSES.includes(searchParams.get('status')) ? searchParams.get('status') : 'All';
+  const initialStatus = ALL_STATUSES.includes(searchParams.get('status')) ? searchParams.get('status') : 'All';
   const initialType = searchParams.get('type') === 'DESIGN' ? 'DESIGN' : 'POST';
   const composeDesign = searchParams.get('design') || '';
   const [filters, setFilters] = useState({ search: '', status: initialStatus, type: initialType, platform: 'All', from: '', to: '' });
@@ -90,7 +95,7 @@ export default function Approvals() {
       <PageHeader
         title={isSuperAdmin ? 'Approval Panel' : 'My Approval Requests'}
         subtitle={isSuperAdmin ? 'Review, approve or request changes to content.' : 'Create and track your content approvals.'}
-        actions={<Button onClick={() => setShowCreate(true)}><Plus className="h-4 w-4" /> New Request</Button>}
+        actions={<Button onClick={() => setShowCreate(true)}><Plus className="h-4 w-4" /> {isCoordinator ? 'Raise design brief' : 'New Request'}</Button>}
       />
 
       {/* Pipeline switch: post approvals vs design approvals */}
@@ -134,7 +139,7 @@ export default function Approvals() {
       {/* Status tabs + compact filters on one wrapping row */}
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <div className="flex flex-wrap gap-1 rounded-xl bg-slate-100 dark:bg-slate-800 p-1">
-          {STATUSES.map((s) => (
+          {(filters.type === 'DESIGN' ? STATUSES_DESIGN : STATUSES_POST).map((s) => (
             <button
               key={s} type="button" onClick={() => applyFilters({ status: s })}
               className={cn(
@@ -210,16 +215,18 @@ export default function Approvals() {
                       <div className="min-w-0">
                         <p className="max-w-[220px] truncate font-semibold text-slate-800 dark:text-white">{r.title}</p>
                         <p className="text-xs text-slate-400">{r.organization?.name || '—'}</p>
-                        {r.type === 'DESIGN' && r.assignedTo && (
+                        {r.type === 'DESIGN' && (r.assignedTo || r.designer) && (
                           <p className="mt-0.5 flex items-center gap-1 text-[11px] font-medium text-violet-500">
-                            <UserCheck className="h-3 w-3" /> {r.assignedTo?.name}
+                            {r.assignedTo
+                              ? <><UserCheck className="h-3 w-3" /> {r.assignedTo?.name}</>
+                              : <><Palette className="h-3 w-3" /> {r.designer?.name}</>}
                           </p>
                         )}
                       </div>
                     </div>
                   </td>
                   <td className="px-4 py-3"><Badge>{r.platform}</Badge></td>
-                  <td className="px-4 py-3"><Badge status={r.status}>{r.status}</Badge></td>
+                  <td className="px-4 py-3"><Badge status={r.status}>{STATUS_LABELS[r.status] || r.status}</Badge></td>
                   <td className="px-4 py-3 text-slate-500 dark:text-slate-400">{formatDate(r.createdAt)}</td>
                   <td className="px-4 py-3 text-slate-500 dark:text-slate-400">{formatDate(r.updatedAt)}</td>
                   <td className="px-4 py-3">

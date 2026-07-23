@@ -3,11 +3,13 @@ import {
   getApprovals,
   getApproval,
   createApproval,
+  submitDesign,
   approveRequest,
   rejectRequest,
   resubmitRequest,
   markPosted,
   assignRequest,
+  deliverToCoordinator,
   forwardRequest,
   addComment,
   deleteApproval,
@@ -22,12 +24,16 @@ router.use(protect);
 router.route('/').get(getApprovals).post(upload.array('images', 10), createApproval);
 router.route('/:id').get(getApproval).delete(deleteApproval);
 
+// The designer submits the finished design for their assigned brief.
+router.put('/:id/submit-design', upload.array('images', 10), submitDesign);
 // ADMIN is the global approver (head of all organizations), so they can
 // approve/reject alongside the per-organization CEO.
 router.put('/:id/approve', authorize(ROLES.ADMIN), approveRequest);
 router.put('/:id/reject', authorize(ROLES.ADMIN), rejectRequest);
-// Hand an approved design to a social-media handler (design → post pipeline).
-router.put('/:id/assign', authorize(ROLES.CEO, ROLES.ADMIN), assignRequest);
+// After approval, the super admin routes the design: allocate it to a social
+// handler to post, or deliver it back to the coordinator.
+router.put('/:id/assign', authorize(ROLES.ADMIN), assignRequest);
+router.put('/:id/deliver', authorize(ROLES.ADMIN), deliverToCoordinator);
 router.put('/:id/forward', authorize(ROLES.ADMIN), forwardRequest);
 router.put('/:id/resubmit', upload.array('images', 10), resubmitRequest);
 router.put('/:id/posted', markPosted);

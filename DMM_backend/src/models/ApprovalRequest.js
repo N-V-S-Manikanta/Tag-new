@@ -56,11 +56,21 @@ const approvalRequestSchema = new mongoose.Schema(
     },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
 
+    // DESIGN brief: the coordinator picks the designer who does the work, and
+    // can flag whether the finished design is meant to be posted on social media
+    // (a hint for the approver, who still chooses the final route).
+    designer: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null, index: true },
+    needsPosting: { type: Boolean, default: false },
+
     // lifecycle timestamps
+    submittedAt: { type: Date }, // when the designer submitted finished work
     approvedAt: { type: Date },
     approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     rejectedAt: { type: Date },
     resubmittedAt: { type: Date },
+    // Delivery of an approved design back to the coordinator (non-post route).
+    deliveredAt: { type: Date },
+    deliveredBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
 
     // DESIGN pipeline: who the approved design was handed to for publishing…
     assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null, index: true },

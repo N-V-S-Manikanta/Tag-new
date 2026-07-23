@@ -11,13 +11,13 @@ import ProfileReviews from '../components/ProfileReviews.jsx';
 import { Button } from '../components/ui/Button.jsx';
 import { Card, Input, Select, Badge, Avatar, Skeleton, EmptyState } from '../components/ui/primitives.jsx';
 import { Modal } from '../components/ui/Modal.jsx';
-import { formatDate, roleLabel, roleStyle } from '../lib/utils.js';
+import { cn, formatDate, roleLabel, roleStyle, userTypeLabel } from '../lib/utils.js';
 
 // Filter options (label → internal role value). Super Admin is seed-only.
 const ROLE_FILTERS = [{ value: 'ADMIN', label: 'Super Admin' }, { value: 'CEO', label: 'Admin' }, { value: 'USER', label: 'User' }];
 // Roles the super admin can assign. 'SUPER' is a UI value → role ADMIN + isSuperAdmin.
 const CREATE_ROLES = [{ value: 'SUPER', label: 'Super Admin (all organizations)' }, { value: 'CEO', label: 'Admin' }, { value: 'USER', label: 'User' }];
-const USER_TYPES = [{ value: 'DESIGNER', label: 'Designer' }, { value: 'SOCIAL_HANDLER', label: 'Social Handler' }];
+const USER_TYPES = [{ value: 'DESIGNER', label: 'Designer' }, { value: 'SOCIAL_HANDLER', label: 'Social Handler' }, { value: 'COORDINATOR', label: 'Coordinator' }];
 const PAGE_PLATFORMS = ['LinkedIn', 'Instagram', 'YouTube', 'Facebook', 'X (Twitter)'];
 const AZAR_HANDLE_ORGS = ['Torii Minds', 'NCET', 'NCMS', 'NDC', 'Technical Hub'];
 const roleIcon = (u) => (u?.isSuperAdmin ? ShieldCheck : u?.role === 'USER' ? UserIcon : Crown);
@@ -118,7 +118,7 @@ export default function Users() {
                             <p className="font-semibold text-slate-700 dark:text-slate-200">{u.name} {isSelf && <span className="text-xs font-normal text-slate-400">(you)</span>}</p>
                             <p className="text-xs text-slate-400">
                               {u.email}{u.jobTitle ? ` · ${u.jobTitle}` : ''}
-                              {u.role === 'USER' && u.userType ? ` · ${u.userType === 'SOCIAL_HANDLER' ? 'Social Handler' : 'Designer'}` : ''}
+                              {u.role === 'USER' && u.userType ? ` · ${userTypeLabel(u.userType)}` : ''}
                             </p>
                             {u.handles?.length > 0 && (
                               <p className="mt-1 text-[11px] text-slate-400">

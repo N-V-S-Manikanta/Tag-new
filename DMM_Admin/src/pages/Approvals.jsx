@@ -13,14 +13,26 @@ import WorkAssignmentModal from '../components/approvals/WorkAssignmentModal.jsx
 import { formatDate, cn, isVideo } from '../lib/utils.js';
 
 export const STATUS_STYLES = {
+  IN_DESIGN: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-300',
   PENDING: 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300',
+  RESUBMITTED: 'bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300',
   APPROVED: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300',
   REJECTED: 'bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300',
-  RESUBMITTED: 'bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300',
-  POSTED: 'bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300',
+  POSTED: 'bg-teal-100 text-teal-700 dark:bg-teal-500/15 dark:text-teal-300',
+  DELIVERED: 'bg-green-100 text-green-700 dark:bg-green-500/15 dark:text-green-300',
+};
+// Human labels for each status (falls back to the raw code for anything unmapped).
+export const STATUS_LABELS = {
+  IN_DESIGN: 'In design',
+  PENDING: 'Pending review',
+  RESUBMITTED: 'Resubmitted',
+  APPROVED: 'Approved',
+  REJECTED: 'Needs changes',
+  POSTED: 'Posted',
+  DELIVERED: 'Delivered',
 };
 export const StatusPill = ({ status, className }) => (
-  <span className={cn('inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold uppercase tracking-wide', STATUS_STYLES[status] || 'bg-slate-100 text-slate-600', className)}>{status}</span>
+  <span className={cn('inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold uppercase tracking-wide', STATUS_STYLES[status] || 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300', className)}>{STATUS_LABELS[status] || status}</span>
 );
 
 // What a rejection feedback point asks the submitter to change.
@@ -54,11 +66,15 @@ const TABS = [
   { value: 'All', label: 'All' },
   // REVIEW is the backend's combined PENDING + RESUBMITTED triage queue.
   { value: 'REVIEW', label: 'Needs review' },
+  // IN_DESIGN / DELIVERED only exist in the design pipeline, so they show only
+  // when the Design tab is active.
+  { value: 'IN_DESIGN', label: 'In design', design: true },
   { value: 'PENDING', label: 'Pending' },
   { value: 'RESUBMITTED', label: 'Resubmitted' },
   { value: 'APPROVED', label: 'Approved' },
   { value: 'REJECTED', label: 'Rejected' },
   { value: 'POSTED', label: 'Posted' },
+  { value: 'DELIVERED', label: 'Delivered', design: true },
 ];
 
 // Stat tiles double as shortcuts to their status tab (Total -> All).
@@ -73,11 +89,13 @@ const TILES = [
 const EMPTY_COPY = {
   All: 'No approval requests yet. Content submitted by any organization will appear here.',
   REVIEW: 'Nothing is awaiting a decision right now.',
+  IN_DESIGN: 'No designs are in progress with a designer right now.',
   PENDING: 'Nothing is awaiting review right now.',
   RESUBMITTED: 'No resubmissions are waiting for a second look.',
   APPROVED: 'No approved content yet.',
   REJECTED: 'Nothing is currently sent back for changes.',
   POSTED: 'Nothing has been marked as posted yet.',
+  DELIVERED: 'No approved designs have been delivered to a coordinator yet.',
 };
 
 // First media item of a request as a small table thumbnail.
@@ -198,7 +216,7 @@ export default function Approvals() {
       {/* Status tabs + filters */}
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <div className="flex flex-wrap items-center gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-800">
-          {TABS.map((t) => (
+          {TABS.filter((t) => !t.design || filters.type === 'DESIGN').map((t) => (
             <button key={t.value} type="button" onClick={() => setFilter({ status: t.value })}
               className={cn('rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors',
                 filters.status === t.value
@@ -271,6 +289,11 @@ export default function Approvals() {
                                 <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: r.organization?.color || '#7c3aed' }} />
                                 <span className="max-w-[220px] truncate">{r.organization?.name || '—'}</span>
                               </p>
+                              {r.type === 'DESIGN' && r.designer && (
+                                <p className="mt-0.5 flex items-center gap-1 text-[11px] font-medium text-indigo-500">
+                                  <Palette className="h-3 w-3" /> {r.designer?.name}
+                                </p>
+                              )}
                               {r.type === 'DESIGN' && r.assignedTo && (
                                 <p className="mt-0.5 flex items-center gap-1 text-[11px] font-medium text-violet-500">
                                   <UserCheck className="h-3 w-3" /> {r.assignedTo?.name}

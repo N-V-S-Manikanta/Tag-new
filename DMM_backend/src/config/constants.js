@@ -9,6 +9,10 @@ export const ROLES = {
 export const USER_TYPES = {
   DESIGNER: 'DESIGNER',
   SOCIAL_HANDLER: 'SOCIAL_HANDLER',
+  // Per-organization persona who raises design briefs for their college and
+  // picks the designer. The finished design is either posted by a social
+  // handler or delivered back to this coordinator.
+  COORDINATOR: 'COORDINATOR',
 };
 
 export const PLATFORMS = ['LinkedIn', 'Instagram', 'YouTube', 'Facebook'];
@@ -22,16 +26,25 @@ export const SOCIAL_PLATFORMS = [...PLATFORMS, 'X (Twitter)'];
 export const FEEDBACK_CATEGORIES = ['Image', 'Content', 'Other', 'Reject'];
 
 export const APPROVAL_STATUS = {
+  // A DESIGN brief that a coordinator has raised and handed to a designer, who
+  // is still working on it (no finished design submitted for approval yet).
+  IN_DESIGN: 'IN_DESIGN',
   PENDING: 'PENDING',
   APPROVED: 'APPROVED',
   REJECTED: 'REJECTED',
   RESUBMITTED: 'RESUBMITTED',
   POSTED: 'POSTED',
+  // Terminal state for an approved design that does NOT need posting: the final
+  // file has been delivered back to the coordinator who raised the brief.
+  DELIVERED: 'DELIVERED',
 };
 
-// What an approval request is about. DESIGN = creative work from the design
-// team; once approved it is ASSIGNED to a social-media handler, who then
-// raises the linked POST request (content + fields) for final approval.
+// What an approval request is about.
+//   DESIGN = a brief a COORDINATOR raises for their org. They pick a DESIGNER,
+//     who does the work and submits it; a super admin approves; then it is
+//     either allocated to a SOCIAL_HANDLER to post, or delivered back to the
+//     coordinator.
+//   POST = standalone ready-to-publish content submitted for approval directly.
 export const APPROVAL_TYPES = {
   POST: 'POST',
   DESIGN: 'DESIGN',
@@ -68,6 +81,9 @@ export const NOTIFICATION_TYPES = {
   CONTENT_RESUBMITTED: 'CONTENT_RESUBMITTED',
   APPROVAL_COMMENT: 'APPROVAL_COMMENT',
   DESIGN_ASSIGNED: 'DESIGN_ASSIGNED',
+  DESIGN_REQUESTED: 'DESIGN_REQUESTED', // coordinator → designer: new brief to work on
+  DESIGN_SUBMITTED: 'DESIGN_SUBMITTED', // designer → approvers: finished design ready
+  CONTENT_DELIVERED: 'CONTENT_DELIVERED', // approver → coordinator: final design delivered
   PROFILE_UPDATE_SUBMITTED: 'PROFILE_UPDATE_SUBMITTED',
   PROFILE_UPDATE_REVIEWED: 'PROFILE_UPDATE_REVIEWED',
   PLAN_SUBMITTED: 'PLAN_SUBMITTED',
@@ -101,6 +117,9 @@ export const ACTIVITY_ACTIONS = {
   SIGNAGE_UPDATED: 'SIGNAGE_UPDATED',
   PROFILE_UPDATED: 'PROFILE_UPDATED',
   DESIGN_FORWARDED: 'DESIGN_FORWARDED',
+  DESIGN_REQUESTED: 'DESIGN_REQUESTED', // coordinator raised a brief for a designer
+  DESIGN_SUBMITTED: 'DESIGN_SUBMITTED', // designer submitted finished work for approval
+  DESIGN_DELIVERED: 'DESIGN_DELIVERED', // approved design delivered to the coordinator
 };
 
 // Physical signage (campus banner stands). A location is the fixed stand/frame;

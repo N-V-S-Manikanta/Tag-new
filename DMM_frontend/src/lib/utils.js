@@ -52,12 +52,26 @@ export const isVideo = (m) =>
 
 // Status -> tailwind color classes (badges, dots)
 export const STATUS_STYLES = {
+  IN_DESIGN: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-300',
   PENDING: 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400',
   APPROVED: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400',
   REJECTED: 'bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-400',
   RESUBMITTED: 'bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-400',
   POSTED: 'bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-400',
+  DELIVERED: 'bg-teal-100 text-teal-700 dark:bg-teal-500/15 dark:text-teal-300',
 };
+
+// Human labels for statuses (the raw enum is ALL_CAPS with underscores).
+export const STATUS_LABELS = {
+  IN_DESIGN: 'In design',
+  PENDING: 'Pending review',
+  APPROVED: 'Approved',
+  REJECTED: 'Needs changes',
+  RESUBMITTED: 'Resubmitted',
+  POSTED: 'Posted',
+  DELIVERED: 'Delivered',
+};
+export const statusLabel = (s) => STATUS_LABELS[s] || s;
 
 export const PLATFORM_STYLES = {
   LinkedIn: { color: '#0A66C2', bg: 'bg-[#0A66C2]' },

@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { Check, ChevronLeft, ChevronRight, Send, Palette, Sparkles, Loader2 } from 'lucide-react';
+import { Check, ChevronLeft, ChevronRight, Palette, Sparkles, Loader2, Share2, PackageCheck } from 'lucide-react';
 import { approvalApi, organizationApi, aiApi } from '../../api/endpoints.js';
 import { useAuthStore } from '../../store/authStore.js';
 import { Modal } from '../ui/Modal.jsx';
 import { Button } from '../ui/Button.jsx';
-import { Input, Select } from '../ui/primitives.jsx';
+import { Input, Select, Avatar } from '../ui/primitives.jsx';
 import FileDropzone from '../ui/FileDropzone.jsx';
 import { cn } from '../../lib/utils.js';
 
@@ -20,25 +20,24 @@ const RATIOS = [
   { value: '1.91:1', label: '1.91:1 — Link / landscape' },
 ];
 
-const STEPS = [
-  { n: 1, label: 'Details' },
-  { n: 2, label: 'Content' },
-  { n: 3, label: 'Media' },
-];
-
-// The two pipelines a request can enter.
-const TYPE_OPTIONS = [
-  { key: 'POST', icon: Send, title: 'Post approval', desc: 'Ready-to-publish content with caption, hashtags & media' },
-  { key: 'DESIGN', icon: Palette, title: 'Design approval', desc: 'Creative work — assigned to a platform handler after approval' },
-];
-
 export default function CreateApprovalModal({ onClose, onSaved, defaultType = 'POST', sourceDesignId = '' }) {
   const { user } = useAuthStore();
+  const isCoordinator = user?.role === 'USER' && user?.userType === 'COORDINATOR';
   const ownOrgId = user?.organization?._id || user?.organization || '';
+  // Coordinators raise DESIGN briefs; everyone else raises standalone POSTs.
+  // (A legacy ?compose=post&design flow still forces POST via sourceDesignId.)
+  const briefMode = isCoordinator && !sourceDesignId;
+  const type = briefMode ? 'DESIGN' : 'POST';
+
+  const STEPS = briefMode
+    ? [{ n: 1, label: 'Details' }, { n: 2, label: 'Brief' }, { n: 3, label: 'Reference' }]
+    : [{ n: 1, label: 'Details' }, { n: 2, label: 'Content' }, { n: 3, label: 'Media' }];
+
   const [step, setStep] = useState(1);
-  // Raising the post for an approved design locks the type to POST.
-  const [type, setType] = useState(sourceDesignId ? 'POST' : defaultType);
-  const [form, setForm] = useState({ title: '', platform: 'LinkedIn', caption: '', description: '', hashtags: '', aspectRatio: '1:1', organization: ownOrgId });
+  const [form, setForm] = useState({
+    title: '', platform: 'LinkedIn', caption: '', description: '', hashtags: '',
+    aspectRatio: '1:1', organization: ownOrgId, designer: '', needsPosting: false,
+  });
   const [images, setImages] = useState([]);
   const [loading, setLoading] = useState(false);
   const [drafting, setDrafting] = useState(false);
@@ -48,12 +47,14 @@ export default function CreateApprovalModal({ onClose, onSaved, defaultType = 'P
   const { data: orgData } = useQuery({ queryKey: ['org-options'], queryFn: organizationApi.options });
   const orgs = orgData?.organizations || [];
 
+  // Designers the coordinator can hand the brief to.
+  const { data: designerData } = useQuery({ queryKey: ['designers'], queryFn: approvalApi.designers, enabled: briefMode });
+  const designers = designerData?.designers || [];
+
   // Only offer AI drafting when the backend has an Anthropic key configured.
   const { data: aiStatus } = useQuery({ queryKey: ['ai-status'], queryFn: aiApi.status, staleTime: 5 * 60 * 1000 });
   const aiReady = !!aiStatus?.configured;
 
-  // One-click on-brand draft: fills caption + hashtags, keeps the user's own
-  // description untouched and shows Tago's angle as a note.
   const draftWithTago = async () => {
     if (!form.title.trim() && !form.description.trim() && !form.caption.trim()) {
       toast.error('Add a title or a short brief first so Tago knows the topic'); return;
@@ -61,25 +62,18 @@ export default function CreateApprovalModal({ onClose, onSaved, defaultType = 'P
     setDrafting(true);
     try {
       const r = await aiApi.draft({
-        platform: form.platform,
-        organization: form.organization,
-        title: form.title,
-        brief: form.description,
-        caption: form.caption,
+        platform: form.platform, organization: form.organization,
+        title: form.title, brief: form.description, caption: form.caption,
       });
-      setForm((f) => ({
-        ...f,
-        caption: r.caption || f.caption,
-        hashtags: r.hashtags || f.hashtags,
-      }));
+      setForm((f) => ({ ...f, caption: r.caption || f.caption, hashtags: r.hashtags || f.hashtags }));
       setTagoNote(r.description || '');
-      toast.success('Tago drafted your post — review and edit as you like');
+      toast.success('Tago drafted your copy — review and edit as you like');
     } catch (err) {
       toast.error(err.response?.data?.message || 'Could not draft right now — try again in a moment');
     } finally { setDrafting(false); }
   };
 
-  // When composing from an approved design, prefill org/platform/title from it.
+  // Legacy compose-from-design: prefill org/platform/title from the source design.
   const { data: designData } = useQuery({
     queryKey: ['approval', sourceDesignId],
     queryFn: () => approvalApi.get(sourceDesignId),
@@ -99,14 +93,16 @@ export default function CreateApprovalModal({ onClose, onSaved, defaultType = 'P
 
   const next = () => {
     if (step === 1) {
-      if (!form.organization) { toast.error('Please choose the organization this post is for'); return; }
+      if (!form.organization) { toast.error('Please choose the organization this is for'); return; }
       if (!form.title.trim()) { toast.error('Please give the request a title'); return; }
+      if (briefMode && !form.designer) { toast.error('Please choose a designer to work on this brief'); return; }
     }
     setStep((s) => Math.min(s + 1, 3));
   };
 
   const submit = async () => {
-    if (images.length === 0) { toast.error('Please add at least one image or video'); return; }
+    // A design brief may have optional reference media; a post needs its final media.
+    if (!briefMode && images.length === 0) { toast.error('Please add at least one image or video'); return; }
     setLoading(true);
     try {
       const fd = new FormData();
@@ -118,26 +114,31 @@ export default function CreateApprovalModal({ onClose, onSaved, defaultType = 'P
       fd.append('description', form.description);
       fd.append('hashtags', form.hashtags);
       fd.append('aspectRatio', form.aspectRatio);
+      if (briefMode) {
+        fd.append('designer', form.designer);
+        fd.append('needsPosting', form.needsPosting ? 'true' : 'false');
+      }
       if (sourceDesignId) fd.append('sourceDesign', sourceDesignId);
       images.forEach((img) => fd.append('images', img));
       await approvalApi.create(fd);
-      toast.success(type === 'DESIGN' ? 'Design submitted for approval' : 'Post approval request submitted');
+      const chosen = designers.find((d) => d._id === form.designer);
+      toast.success(briefMode ? `Design brief sent to ${chosen?.name || 'the designer'}` : 'Post approval request submitted');
       onSaved();
     } catch (err) {
       toast.error(err.response?.data?.message || 'Submission failed');
     } finally { setLoading(false); }
   };
 
+  const title = briefMode ? 'Raise a design brief' : sourceDesignId ? 'Create Post Approval Request' : 'Create Post Approval Request';
+
   return (
-    <Modal open onClose={onClose} title={type === 'DESIGN' ? 'Submit Design for Approval' : 'Create Post Approval Request'} size="lg">
-      {/* Composing from an approved design — the pipeline link is automatic */}
-      {sourceDesignId && (
+    <Modal open onClose={onClose} title={title} size="lg">
+      {briefMode && (
         <div className="mb-5 flex items-start gap-3 rounded-xl border border-violet-200 bg-violet-50/70 p-3.5 dark:border-violet-500/30 dark:bg-violet-500/10">
           <Palette className="mt-0.5 h-4 w-4 shrink-0 text-violet-500" />
           <p className="text-sm text-slate-600 dark:text-slate-300">
-            Raising the <span className="font-semibold">post request</span> for the approved design{' '}
-            <span className="font-semibold text-violet-600 dark:text-violet-300">{design?.title || '…'}</span>.
-            Organization and platform are carried over; add the caption, hashtags and final media.
+            Describe what you need and pick a designer. They’ll create it and submit for approval; once approved it’s
+            either posted by a social handler or delivered back to you.
           </p>
         </div>
       )}
@@ -171,24 +172,7 @@ export default function CreateApprovalModal({ onClose, onSaved, defaultType = 'P
       {/* Step 1 — Details */}
       {step === 1 && (
         <div className="space-y-4">
-          {!sourceDesignId && (
-            <div className="grid gap-3 sm:grid-cols-2">
-              {TYPE_OPTIONS.map((o) => (
-                <button
-                  key={o.key} type="button" onClick={() => setType(o.key)}
-                  className={cn(
-                    'rounded-2xl border-2 p-4 text-left transition',
-                    type === o.key ? 'border-brand-500 bg-brand-50/60 dark:bg-brand-500/10' : 'border-slate-200 hover:border-brand-300 dark:border-slate-700'
-                  )}
-                >
-                  <o.icon className={cn('h-5 w-5', type === o.key ? 'text-brand-600 dark:text-brand-400' : 'text-slate-400')} />
-                  <p className="mt-2 text-sm font-bold text-slate-800 dark:text-white">{o.title}</p>
-                  <p className="mt-0.5 text-xs leading-relaxed text-slate-400">{o.desc}</p>
-                </button>
-              ))}
-            </div>
-          )}
-          <Select label="Organization (who this post is for)" value={form.organization} onChange={(e) => setForm({ ...form, organization: e.target.value })}>
+          <Select label="Organization (who this is for)" value={form.organization} onChange={(e) => setForm({ ...form, organization: e.target.value })}>
             <option value="">— Select organization —</option>
             {orgs.map((o) => <option key={o._id} value={o._id}>{o.name}</option>)}
           </Select>
@@ -198,16 +182,57 @@ export default function CreateApprovalModal({ onClose, onSaved, defaultType = 'P
               {PLATFORMS.map((p) => <option key={p} value={p}>{p}</option>)}
             </Select>
           </div>
+
+          {briefMode && (
+            <>
+              <Select label="Assign to designer" value={form.designer} onChange={(e) => setForm({ ...form, designer: e.target.value })}>
+                <option value="">— Choose a designer —</option>
+                {designers.map((d) => <option key={d._id} value={d._id}>{d.name}{d.organization?.name ? ` · ${d.organization.name}` : ''}</option>)}
+              </Select>
+              {form.designer && (() => {
+                const d = designers.find((x) => x._id === form.designer);
+                return d ? (
+                  <div className="flex items-center gap-3 rounded-xl border border-slate-200 p-3 dark:border-slate-700">
+                    <Avatar src={d.avatar} name={d.name} size="sm" />
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-slate-800 dark:text-white">{d.name}</p>
+                      {d.skills?.length > 0 && <p className="truncate text-xs text-slate-400">{d.skills.slice(0, 4).join(' · ')}</p>}
+                    </div>
+                  </div>
+                ) : null;
+              })()}
+
+              {/* Needs-posting toggle */}
+              <button
+                type="button" onClick={() => setForm({ ...form, needsPosting: !form.needsPosting })}
+                className={cn(
+                  'flex w-full items-center justify-between gap-3 rounded-xl border-2 p-3.5 text-left transition',
+                  form.needsPosting ? 'border-brand-500 bg-brand-50/60 dark:bg-brand-500/10' : 'border-slate-200 hover:border-brand-300 dark:border-slate-700'
+                )}
+              >
+                <span className="flex items-center gap-2.5">
+                  {form.needsPosting ? <Share2 className="h-5 w-5 text-brand-600 dark:text-brand-400" /> : <PackageCheck className="h-5 w-5 text-slate-400" />}
+                  <span>
+                    <span className="block text-sm font-bold text-slate-800 dark:text-white">{form.needsPosting ? 'Post it on social media' : 'Just deliver it to me'}</span>
+                    <span className="block text-xs text-slate-400">{form.needsPosting ? 'After approval, a social handler will publish it.' : 'After approval, the final file comes back to you.'}</span>
+                  </span>
+                </span>
+                <span className={cn('relative h-6 w-11 shrink-0 rounded-full transition', form.needsPosting ? 'bg-brand-600' : 'bg-slate-300 dark:bg-slate-600')}>
+                  <span className={cn('absolute top-0.5 h-5 w-5 rounded-full bg-white transition-all', form.needsPosting ? 'left-[22px]' : 'left-0.5')} />
+                </span>
+              </button>
+            </>
+          )}
+
           <Select label="Image / video ratio" value={form.aspectRatio} onChange={(e) => setForm({ ...form, aspectRatio: e.target.value })}>
             {RATIOS.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
           </Select>
         </div>
       )}
 
-      {/* Step 2 — Content */}
+      {/* Step 2 — Content / Brief */}
       {step === 2 && (
         <div className="space-y-4">
-          {/* Tago AI drafting — one click turns the brief into a ready caption */}
           {aiReady && (
             <div className="rounded-2xl border border-brand-200/70 bg-gradient-to-br from-brand-50 to-white p-3.5 dark:border-brand-500/25 dark:from-brand-500/10 dark:to-transparent">
               <div className="flex flex-wrap items-center justify-between gap-3">
@@ -222,10 +247,8 @@ export default function CreateApprovalModal({ onClose, onSaved, defaultType = 'P
                 </div>
                 <button
                   type="button" onClick={draftWithTago} disabled={drafting}
-                  className={cn(
-                    'inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold text-white shadow-sm transition',
-                    'bg-gradient-to-r from-brand-600 to-amber-500 hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-70'
-                  )}
+                  className={cn('inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold text-white shadow-sm transition',
+                    'bg-gradient-to-r from-brand-600 to-amber-500 hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-70')}
                 >
                   {drafting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
                   {drafting ? 'Tago is writing…' : form.caption.trim() ? 'Redraft with Tago' : 'Draft with Tago'}
@@ -239,17 +262,20 @@ export default function CreateApprovalModal({ onClose, onSaved, defaultType = 'P
               )}
             </div>
           )}
-          <textarea className="input-base min-h-[70px]" placeholder="Caption" value={form.caption} onChange={(e) => setForm({ ...form, caption: e.target.value })} />
-          <textarea className="input-base min-h-[70px]" placeholder="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+          <textarea className="input-base min-h-[90px]" placeholder={briefMode ? 'Brief — what should the design show? Any text, colours, references, dos & don’ts…' : 'Description'} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+          <textarea className="input-base min-h-[70px]" placeholder={briefMode ? 'Suggested caption (optional)' : 'Caption'} value={form.caption} onChange={(e) => setForm({ ...form, caption: e.target.value })} />
           <Input label="Hashtags (comma or space separated)" value={form.hashtags} onChange={(e) => setForm({ ...form, hashtags: e.target.value })} placeholder="college, placement, success" />
         </div>
       )}
 
-      {/* Step 3 — Media */}
+      {/* Step 3 — Media / Reference */}
       {step === 3 && (
         <div>
-          <span className="mb-1.5 block text-sm font-medium text-slate-600 dark:text-slate-300">Images & videos (drag & drop, multiple, reorderable)</span>
-          <FileDropzone multiple reorderable accept="image/*,video/*" files={images} onChange={setImages} label="Drop images or videos here or click to browse" />
+          <span className="mb-1.5 block text-sm font-medium text-slate-600 dark:text-slate-300">
+            {briefMode ? 'Reference material (optional) — logos, examples, raw photos' : 'Images & videos (drag & drop, multiple, reorderable)'}
+          </span>
+          <FileDropzone multiple reorderable accept="image/*,video/*" files={images} onChange={setImages}
+            label={briefMode ? 'Drop any reference files here (optional)' : 'Drop images or videos here or click to browse'} />
         </div>
       )}
 
@@ -262,7 +288,7 @@ export default function CreateApprovalModal({ onClose, onSaved, defaultType = 'P
           {step < 3 ? (
             <Button type="button" onClick={next}>Next <ChevronRight className="h-4 w-4" /></Button>
           ) : (
-            <Button type="button" loading={loading} onClick={submit}>Submit Request</Button>
+            <Button type="button" loading={loading} onClick={submit}>{briefMode ? 'Send brief' : 'Submit Request'}</Button>
           )}
         </div>
       </div>
